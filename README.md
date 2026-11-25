@@ -2,70 +2,57 @@
 
 TypeScript API service for the Mankaleshwar Mahadev Temple website.
 
-## Current foundation
-
-- Fastify 5 HTTP server
-- Strict TypeScript configuration
-- Environment validation with Zod
-- Security headers with Helmet
-- Explicit CORS allowlist
-- Global rate limiting
-- Structured logging with sensitive header redaction
-- Versioned health endpoint: `GET /api/v1/health`
-- Graceful shutdown on SIGINT and SIGTERM
-
-## Requirements
-
-- Node.js 22 or newer
-- npm
+## Stack
+- Node.js 22+
+- Fastify 5 and TypeScript
+- PostgreSQL 17 hosted on Neon
+- Zod request and environment validation
 
 ## Run locally
+1. Copy .env.example to .env.
+2. Set DATABASE_URL to a PostgreSQL connection string (use a pooled Neon URL for API traffic).
+3. Install dependencies with npm install.
+4. Run npm run dev.
 
-1. Copy `.env.example` to `.env`.
-2. Install dependencies with `npm install`.
-3. Start development mode with `npm run dev`.
+## Commands
+- npm run dev — development server with reload
+- npm run typecheck — TypeScript type checking
+- npm run build — compile to dist/
+- npm start — run compiled server
+- npm run admin:create — one-time creation of the single admin account; requires DATABASE_URL, ADMIN_EMAIL, and ADMIN_PASSWORD (12+ characters)
 
-## Available commands
+## API v1
+All endpoints are under /api/v1.
 
-- `npm run dev` — development server with reload
-- `npm run typecheck` — TypeScript type checking
-- `npm run build` — compile to `dist/`
-- `npm start` — run compiled server
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| GET | /health | Process health check |
+| GET | /photos | List published photos; supports from, to, limit, offset |
+| POST | /photos/:photoId/likes | Add an idempotent guest like using a client-generated visitorId UUID |
+| GET | /announcements | List published announcements; supports limit, offset |
+| PUT | /push-subscriptions | Register/update a browser push subscription for one or both notification channels |
+| POST | /admin/auth/login | Authenticate the single admin and issue an HttpOnly session cookie |
+| POST | /admin/auth/logout | Revoke the current admin session |
+| GET | /admin/auth/me | Check the current admin session |
 
-The API listens on port 4000 by default.
+## Single-admin security
+Apply database migration 002 before enabling admin authentication. It creates server-side sessions and a database constraint that permits only one admin row. Admin passwords are hashed with Node.js scrypt and a random salt; raw passwords are never stored. Session tokens are random, stored only as SHA-256 hashes, and delivered in HttpOnly, SameSite=Strict cookies (Secure in production). Login is rate-limited.
 
-## Scope decisions intentionally deferred
+Provision the account once using the deployment environment's secret variables: DATABASE_URL, ADMIN_EMAIL, and ADMIN_PASSWORD (minimum 12 characters), then run npm run admin:create. Do not leave ADMIN_PASSWORD configured after provisioning. Do not expose the provisioning command as a public HTTP endpoint.
 
-The repository requirements leave several product and provider decisions open. This foundation does not invent those decisions. Database selection and schema, admin authentication and permissions, comment moderation and abuse controls, notification delivery, and media storage integration must be designed before their corresponding features are implemented.
+The content endpoints require DATABASE_URL. If it is not configured, they return HTTP 503 rather than pretending the database is available.
 
-## API
-
-### Health
-
-`GET /api/v1/health`
-
-Returns the service status and timestamp. This is a process-level health check; it does not yet verify database, storage, or notification-provider connectivity.
+## Browser notification subscriptions
+PUT /push-subscriptions stores browser subscriptions and channel choices only. Push delivery, VAPID key management, retries, and automatic publish triggers remain separate implementation work.
 
 ## Database
+The initial schema is in database/migrations/001_initial_schema.sql. Migration 002 is database/migrations/002_single_admin_sessions.sql. The initial schema has been applied to Neon project mankaleshwar-mahadev (PostgreSQL 17, AWS Singapore). Never commit database credentials or admin secrets.
 
-The initial PostgreSQL schema is in `database/migrations/001_initial_schema.sql`.
-It defines admins, photos, guest photo likes/comments, announcements, browser push
-subscriptions, and the independent `photos` / `announcements` subscription channels.
-
-### Apply the initial migration
-
-Create an empty PostgreSQL 15+ database, then apply the migration using your
-PostgreSQL SQL client or deployment workflow. The migration is intended to be
-applied once to an empty database. Future schema changes must be added as new,
-ordered SQL migration files; do not modify a migration after it has been applied.
-
-No database credentials or connection strings are committed to this repository.
-
-### Schema boundaries
-
-- Media records store generic storage keys and media URLs. No storage vendor is selected.
-- Guest likes and comments use opaque client-generated visitor UUIDs; no visitor account is created.
-- Comment moderation/display rules remain undecided and must be settled before public comment publishing is enabled.
-- Admin roles, login/session strategy, and password reset policy remain to be designed.
-- Push subscription data follows the browser Push API shape; delivery provider and retry/expiry policies remain undecided.
-- Like removal behavior and subscription lifecycle rules are handled by future API behavior, not assumed by this schema.
+## Remaining implementation
+- Admin photo and announcement management APIs
+- Media upload/storage provider integration (provider not selected)
+- Guest comments and moderation rules
+- Browser push delivery and automatic publish triggers
+- Automated API/integration tests
+- Production hosting configuration and live deployment
+- Pujari/admin contact workflow (not decided)
