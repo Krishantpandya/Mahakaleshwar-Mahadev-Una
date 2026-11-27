@@ -17,7 +17,10 @@ async function cleanupObject(app: FastifyInstance, key: string): Promise<void> {
 }
 
 export const adminContentRoutes: FastifyPluginAsync = async (app) => {
-  app.post("/admin/photos", { preHandler: requireAdmin }, async (request, reply) => {
+  app.post("/admin/photos", {
+    preHandler: requireAdmin,
+    config: { rateLimit: { max: 20, timeWindow: "1 hour" } }
+  }, async (request, reply) => {
     if (!database) return reply.code(503).send({ error: "Database is not configured" });
     if (!isB2Configured()) return reply.code(503).send({ error: "Backblaze B2 storage is not configured" });
     const query = z.object({
@@ -60,7 +63,10 @@ export const adminContentRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.post("/admin/announcements", { preHandler: requireAdmin }, async (request, reply) => {
+  app.post("/admin/announcements", {
+    preHandler: requireAdmin,
+    config: { rateLimit: { max: 20, timeWindow: "1 hour" } }
+  }, async (request, reply) => {
     if (!database) return reply.code(503).send({ error: "Database is not configured" });
     const fields: Record<string, string> = {};
     let image: { body: Buffer; mimetype: string; extension: string } | undefined;
@@ -71,12 +77,17 @@ export const adminContentRoutes: FastifyPluginAsync = async (app) => {
         if (!extension) return reply.code(415).send({ error: "Only JPEG, PNG, WebP, and AVIF poster images are accepted" });
         if (!matchesImageSignature(body, part.mimetype)) return reply.code(415).send({ error: "Poster content does not match its declared file type" });
         image = { body, mimetype: part.mimetype, extension };
-      } else fields[part.fieldname] = String(part.value);
+      } else {
+        if (Object.prototype.hasOwnProperty.call(fields, part.fieldname)) {
+          return reply.code(400).send({ error: `Duplicate announcement field: ${part.fieldname}` });
+        }
+        fields[part.fieldname] = String(part.value);
+      }
     }
     const parsed = z.object({
       title: z.string().trim().max(200).optional(),
       message: z.string().trim().max(5000).optional()
-    }).safeParse(fields);
+    }).strict().safeParse(fields);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid announcement fields", details: parsed.error.flatten() });
     const title = parsed.data.title || null;
     const message = parsed.data.message || null;
