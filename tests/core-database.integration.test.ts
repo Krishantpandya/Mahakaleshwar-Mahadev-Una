@@ -209,6 +209,13 @@ test("admin sessions authenticate, reject invalid sessions, and logout revokes t
     const unauthorized = await app.inject({ method: "GET", url: "/api/v1/admin/auth/me" });
     assert.equal(unauthorized.statusCode, 401);
 
+    const untrustedLogin = await app.inject({
+      method: "POST", url: "/api/v1/admin/auth/login",
+      headers: { origin: "https://attacker.example.test" },
+      payload: { email, password }
+    });
+    assert.equal(untrustedLogin.statusCode, 403);
+
     const badLogin = await app.inject({
       method: "POST", url: "/api/v1/admin/auth/login",
       payload: { email, password: "incorrect-password" }
@@ -229,8 +236,16 @@ test("admin sessions authenticate, reject invalid sessions, and logout revokes t
     assert.equal(me.statusCode, 200);
     assert.equal(me.json<{ admin: { email: string } }>().admin.email, email);
 
+    const blockedLogout = await app.inject({
+      method: "POST", url: "/api/v1/admin/auth/logout",
+      headers: { origin: "https://attacker.example.test" },
+      cookies: { mankaleshwar_admin_session: cookie.value }
+    });
+    assert.equal(blockedLogout.statusCode, 403);
+
     const logout = await app.inject({
       method: "POST", url: "/api/v1/admin/auth/logout",
+      headers: { origin: "http://localhost:5173" },
       cookies: { mankaleshwar_admin_session: cookie.value }
     });
     assert.equal(logout.statusCode, 200);
