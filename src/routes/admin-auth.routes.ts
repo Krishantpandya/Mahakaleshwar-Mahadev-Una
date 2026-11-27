@@ -35,7 +35,7 @@ export async function requireAdmin(request: FastifyRequest, reply: FastifyReply)
     [hashToken(token)]
   );
   if (!result.rows[0]) {
-    await reply.clearCookie(env.adminSessionCookie, { path: "/" });
+    reply.clearCookie(env.adminSessionCookie, { path: "/" });
     await reply.code(401).send({ error: "Authentication required" });
     return;
   }
