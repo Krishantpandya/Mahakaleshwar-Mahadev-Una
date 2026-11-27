@@ -6,6 +6,7 @@ import { env } from "../config/env.js";
 import { requireAdmin } from "./admin-auth.routes.js";
 import { createB2ReadUrl, deleteB2Object, isB2Configured, uploadB2Object } from "../storage/b2.js";
 import { isDecodableImage, type SupportedImageMime } from "../storage/image-validation.js";
+import { toPushPreview } from "../notifications/payload.js";
 
 const imageTypes: Record<string, string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif"
@@ -56,7 +57,7 @@ export const adminContentRoutes: FastifyPluginAsync = async (app) => {
           "INSERT INTO notification_outbox (channel, payload) VALUES ($1, $2::jsonb)",
           ["photos", JSON.stringify({
             title: "New temple photo",
-            body: query.data.caption || "A new photo has been published.",
+            body: query.data.caption ? toPushPreview(query.data.caption) : "A new photo has been published.",
             url: "/"
           })]
         );
@@ -125,9 +126,7 @@ export const adminContentRoutes: FastifyPluginAsync = async (app) => {
           "INSERT INTO notification_outbox (channel, payload) VALUES ($1, $2::jsonb)",
           ["announcements", JSON.stringify({
             title: title || "Temple announcement",
-            body: message
-              ? (message.length > 180 ? message.slice(0, 177).trimEnd() + "..." : message)
-              : "A new announcement has been published.",
+            body: message ? toPushPreview(message) : "A new announcement has been published.",
             url: "/"
           })]
         );
