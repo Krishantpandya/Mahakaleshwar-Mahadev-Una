@@ -191,6 +191,56 @@ test("content and its notification outbox row roll back as one transaction", asy
   assert.equal(notification.rowCount, 0);
 });
 
+test("notification outbox claims are concurrency-safe and stale claims can be recovered", async () => {
+  const title = "Outbox claim concurrency " + randomUUID();
+  const inserted = await database.query(
+    "INSERT INTO notification_outbox (channel, payload) VALUES ($1, $2::jsonb) RETURNING id",
+    ["photos", JSON.stringify({ title, body: "claim test", url: "/" })]
+  );
+  const notificationId = inserted.rows[0].id as string;
+  const first = await database.connect();
+  const second = await database.connect();
+  try {
+    await first.query("BEGIN");
+    const firstClaim = await first.query(
+      "SELECT id FROM notification_outbox WHERE id = $1 AND delivered_at IS NULL AND dead_at IS NULL " +
+      "AND (claimed_at IS NULL OR claimed_at < NOW() - INTERVAL '5 minutes') FOR UPDATE SKIP LOCKED",
+      [notificationId]
+    );
+    assert.equal(firstClaim.rowCount, 1);
+
+    await second.query("BEGIN");
+    const secondClaim = await second.query(
+      "SELECT id FROM notification_outbox WHERE id = $1 AND delivered_at IS NULL AND dead_at IS NULL " +
+      "AND (claimed_at IS NULL OR claimed_at < NOW() - INTERVAL '5 minutes') FOR UPDATE SKIP LOCKED",
+      [notificationId]
+    );
+    assert.equal(secondClaim.rowCount, 0);
+    await first.query("UPDATE notification_outbox SET claimed_at = NOW() WHERE id = $1", [notificationId]);
+    await first.query("COMMIT");
+    await second.query("COMMIT");
+
+    await database.query(
+      "UPDATE notification_outbox SET claimed_at = NOW() - INTERVAL '6 minutes' WHERE id = $1",
+      [notificationId]
+    );
+    const recovered = await database.query(
+      "SELECT id FROM notification_outbox WHERE id = $1 AND delivered_at IS NULL AND dead_at IS NULL " +
+      "AND (claimed_at IS NULL OR claimed_at < NOW() - INTERVAL '5 minutes') FOR UPDATE SKIP LOCKED",
+      [notificationId]
+    );
+    assert.equal(recovered.rowCount, 1);
+  } catch (error) {
+    await first.query("ROLLBACK").catch(() => undefined);
+    await second.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    first.release();
+    second.release();
+    await database.query("DELETE FROM notification_outbox WHERE id = $1", [notificationId]);
+  }
+});
+
 test("admin sessions authenticate, reject invalid sessions, and logout revokes the session", async () => {
   const email = `integration-${randomUUID()}@example.test`;
   const password = "Integration-Test-Password-123";
