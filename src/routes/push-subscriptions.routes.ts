@@ -1,12 +1,27 @@
 import type { FastifyPluginAsync } from "fastify";
+import { isIP } from "node:net";
 import { z } from "zod";
 import { database } from "../database.js";
 
+const endpointSchema = z.string().url().max(4096).refine((value) => {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    if (url.protocol !== "https:" || url.username || url.password) return false;
+    if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local")) return false;
+    // Literal IP endpoints are not needed for browser push services and can target private infrastructure.
+    if (isIP(hostname)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}, { message: "A public HTTPS push endpoint is required" });
+
 const subscriptionSchema = z.object({
-  endpoint: z.string().url().max(4096),
+  endpoint: endpointSchema,
   keys: z.object({
-    p256dh: z.string().min(1).max(512),
-    auth: z.string().min(1).max(512)
+    p256dh: z.string().min(1).max(512).regex(/^[A-Za-z0-9_-]+$/),
+    auth: z.string().min(1).max(512).regex(/^[A-Za-z0-9_-]+$/)
   }),
   channels: z.array(z.enum(["photos", "announcements"])).min(1).max(2)
 }).refine((value) => new Set(value.channels).size === value.channels.length, {
@@ -14,7 +29,9 @@ const subscriptionSchema = z.object({
 });
 
 export const pushSubscriptionRoutes: FastifyPluginAsync = async (app) => {
-  app.put("/push-subscriptions", async (request, reply) => {
+  app.put("/push-subscriptions", {
+    config: { rateLimit: { max: 10, timeWindow: "10 minutes" } }
+  }, async (request, reply) => {
     if (!database) {
       return reply.code(503).send({ error: "Database is not configured" });
     }
