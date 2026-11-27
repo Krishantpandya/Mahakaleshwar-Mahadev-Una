@@ -5,7 +5,7 @@ import { database } from "../database.js";
 import { env } from "../config/env.js";
 import { requireAdmin } from "./admin-auth.routes.js";
 import { createB2ReadUrl, deleteB2Object, isB2Configured, uploadB2Object } from "../storage/b2.js";
-import { matchesImageSignature } from "../storage/image-validation.js";
+import { isDecodableImage, type SupportedImageMime } from "../storage/image-validation.js";
 
 const imageTypes: Record<string, string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif"
@@ -33,7 +33,9 @@ export const adminContentRoutes: FastifyPluginAsync = async (app) => {
     const body = await file.toBuffer();
     const extension = imageTypes[file.mimetype];
     if (!extension) return reply.code(415).send({ error: "Only JPEG, PNG, WebP, and AVIF images are accepted" });
-    if (!matchesImageSignature(body, file.mimetype)) return reply.code(415).send({ error: "Image content does not match its declared file type" });
+    if (!(await isDecodableImage(body, file.mimetype as SupportedImageMime))) {
+      return reply.code(415).send({ error: "Image is invalid, truncated, unsupported, or exceeds the 20-megapixel limit" });
+    }
 
     const id = randomUUID();
     const key = `photos/${id}.${extension}`;
@@ -84,7 +86,9 @@ export const adminContentRoutes: FastifyPluginAsync = async (app) => {
         const body = await part.toBuffer();
         const extension = imageTypes[part.mimetype];
         if (!extension) return reply.code(415).send({ error: "Only JPEG, PNG, WebP, and AVIF poster images are accepted" });
-        if (!matchesImageSignature(body, part.mimetype)) return reply.code(415).send({ error: "Poster content does not match its declared file type" });
+        if (!(await isDecodableImage(body, part.mimetype as SupportedImageMime))) {
+          return reply.code(415).send({ error: "Poster image is invalid, truncated, unsupported, or exceeds the 20-megapixel limit" });
+        }
         image = { body, mimetype: part.mimetype, extension };
       } else {
         if (Object.prototype.hasOwnProperty.call(fields, part.fieldname)) {
