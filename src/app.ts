@@ -13,8 +13,10 @@ import { announcementRoutes } from "./routes/announcements.routes.js";
 import { pushSubscriptionRoutes } from "./routes/push-subscriptions.routes.js";
 import { adminAuthRoutes } from "./routes/admin-auth.routes.js";
 import { adminContentRoutes } from "./routes/admin-content.routes.js";
+import { startNotificationOutboxWorker } from "./notifications/outbox.js";
 
 export function buildApp() {
+  let stopNotificationWorker: (() => void) | undefined;
   const app = Fastify({
     logger: {
       level: env.nodeEnv === "production" ? "info" : "debug",
@@ -34,7 +36,13 @@ export function buildApp() {
   app.register(pushSubscriptionRoutes, { prefix: "/api/v1" });
   app.register(adminAuthRoutes, { prefix: "/api/v1/admin/auth" });
   app.register(adminContentRoutes, { prefix: "/api/v1" });
-  app.addHook("onClose", async () => { await database?.end(); });
+  app.addHook("onReady", async () => {
+    stopNotificationWorker = startNotificationOutboxWorker(app.log);
+  });
+  app.addHook("onClose", async () => {
+    stopNotificationWorker?.();
+    await database?.end();
+  });
   app.setErrorHandler((error, request, reply) => {
     const normalizedError = error instanceof Error ? error : new Error(String(error));
     const errorStatus = (normalizedError as Error & { statusCode?: number }).statusCode;
