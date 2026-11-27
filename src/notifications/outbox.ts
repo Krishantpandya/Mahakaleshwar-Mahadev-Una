@@ -10,6 +10,19 @@ type OutboxRow = {
   attempts: number;
 };
 
+export function getNotificationRetry(attemptsSoFar: number): {
+  attempts: number;
+  terminal: boolean;
+  delaySeconds: number;
+} {
+  const attempts = attemptsSoFar + 1;
+  return {
+    attempts,
+    terminal: attempts >= 10,
+    delaySeconds: Math.min(3600, 30 * (2 ** Math.min(attempts - 1, 7)))
+  };
+}
+
 export async function enqueueNotification(
   channel: NotificationChannel,
   payload: NotificationPayload
@@ -65,17 +78,15 @@ export async function processNotificationOutbox(logger: FastifyBaseLogger): Prom
           [row.id]
         );
       } catch (error) {
-        const attempts = row.attempts + 1;
-        const terminal = attempts >= 10;
-        const delaySeconds = Math.min(3600, 30 * (2 ** Math.min(attempts - 1, 7)));
+        const retry = getNotificationRetry(row.attempts);
         await database.query(
           "UPDATE notification_outbox SET attempts = $2, claimed_at = NULL, " +
           "available_at = NOW() + ($3 * INTERVAL '1 second'), " +
           "dead_at = CASE WHEN $4 THEN NOW() ELSE NULL END, last_error = $5 WHERE id = $1",
-          [row.id, attempts, delaySeconds, terminal,
+          [row.id, retry.attempts, retry.delaySeconds, retry.terminal,
             error instanceof Error ? error.message.slice(0, 2000) : String(error).slice(0, 2000)]
         );
-        logger.error({ err: error, notificationId: row.id, attempts, terminal }, "Queued notification delivery failed");
+        logger.error({ err: error, notificationId: row.id, attempts: retry.attempts, terminal: retry.terminal }, "Queued notification delivery failed");
       }
     }
   } catch (error) {
