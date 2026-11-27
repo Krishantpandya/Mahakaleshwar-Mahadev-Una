@@ -6,7 +6,6 @@ import { env } from "../config/env.js";
 import { requireAdmin } from "./admin-auth.routes.js";
 import { createB2ReadUrl, deleteB2Object, isB2Configured, uploadB2Object } from "../storage/b2.js";
 import { matchesImageSignature } from "../storage/image-validation.js";
-import { enqueueNotification } from "../notifications/outbox.js";
 
 const imageTypes: Record<string, string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif"
@@ -41,20 +40,30 @@ export const adminContentRoutes: FastifyPluginAsync = async (app) => {
     await uploadB2Object({ key, body, contentType: file.mimetype });
     try {
       const mediaUrl = await createB2ReadUrl(key);
-      const result = await database.query(
-        "INSERT INTO photos (id, storage_key, media_url, mime_type, file_size_bytes, caption, taken_at, published_at, created_by_admin_id) " +
-        "VALUES ($1, $2, NULL, $3, $4, $5, $6, NOW(), $7) " +
-        "RETURNING id, mime_type, file_size_bytes, caption, taken_at, published_at, uploaded_at",
-        [id, key, file.mimetype, body.length, query.data.caption ?? null, query.data.takenAt ?? null, request.admin?.id ?? null]
-      );
+      const client = await database.connect();
+      let result;
       try {
-        await enqueueNotification("photos", {
-          title: "New temple photo",
-          body: query.data.caption || "A new photo has been published.",
-          url: "/"
-        });
-      } catch (notificationError) {
-        request.log.error({ err: notificationError, photoId: id }, "Photo was published but notification processing failed");
+        await client.query("BEGIN");
+        result = await client.query(
+          "INSERT INTO photos (id, storage_key, media_url, mime_type, file_size_bytes, caption, taken_at, published_at, created_by_admin_id) " +
+          "VALUES ($1, $2, NULL, $3, $4, $5, $6, NOW(), $7) " +
+          "RETURNING id, mime_type, file_size_bytes, caption, taken_at, published_at, uploaded_at",
+          [id, key, file.mimetype, body.length, query.data.caption ?? null, query.data.takenAt ?? null, request.admin?.id ?? null]
+        );
+        await client.query(
+          "INSERT INTO notification_outbox (channel, payload) VALUES ($1, $2::jsonb)",
+          ["photos", JSON.stringify({
+            title: "New temple photo",
+            body: query.data.caption || "A new photo has been published.",
+            url: "/"
+          })]
+        );
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
       }
       return reply.code(201).send({ data: { ...result.rows[0], media_url: mediaUrl } });
     } catch (error) {
@@ -99,19 +108,29 @@ export const adminContentRoutes: FastifyPluginAsync = async (app) => {
     if (image && key) await uploadB2Object({ key, body: image.body, contentType: image.mimetype });
     try {
       const posterUrl = key ? await createB2ReadUrl(key) : null;
-      const result = await database.query(
-        "INSERT INTO announcements (id, title, message, poster_storage_key, poster_media_url, published_at, created_by_admin_id) " +
-        "VALUES ($1, $2, $3, $4, NULL, NOW(), $5) RETURNING id, title, message, published_at",
-        [id, title, message, key, request.admin?.id ?? null]
-      );
+      const client = await database.connect();
+      let result;
       try {
-        await enqueueNotification("announcements", {
-          title: title || "Temple announcement",
-          body: message || "A new announcement has been published.",
-          url: "/"
-        });
-      } catch (notificationError) {
-        request.log.error({ err: notificationError, announcementId: id }, "Announcement was published but notification processing failed");
+        await client.query("BEGIN");
+        result = await client.query(
+          "INSERT INTO announcements (id, title, message, poster_storage_key, poster_media_url, published_at, created_by_admin_id) " +
+          "VALUES ($1, $2, $3, $4, NULL, NOW(), $5) RETURNING id, title, message, published_at",
+          [id, title, message, key, request.admin?.id ?? null]
+        );
+        await client.query(
+          "INSERT INTO notification_outbox (channel, payload) VALUES ($1, $2::jsonb)",
+          ["announcements", JSON.stringify({
+            title: title || "Temple announcement",
+            body: message || "A new announcement has been published.",
+            url: "/"
+          })]
+        );
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
       }
       return reply.code(201).send({ data: { ...result.rows[0], poster_media_url: posterUrl } });
     } catch (error) {
