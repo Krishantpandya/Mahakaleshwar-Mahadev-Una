@@ -125,7 +125,9 @@ export const adminContentRoutes: FastifyPluginAsync = async (app) => {
           "INSERT INTO notification_outbox (channel, payload) VALUES ($1, $2::jsonb)",
           ["announcements", JSON.stringify({
             title: title || "Temple announcement",
-            body: message || "A new announcement has been published.",
+            body: message
+              ? (message.length > 180 ? message.slice(0, 177).trimEnd() + "..." : message)
+              : "A new announcement has been published.",
             url: "/"
           })]
         );
