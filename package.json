@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "description": "Backend API for the Mankaleshwar Mahadev Temple website",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
@@ -25,12 +27,14 @@
     "dotenv": "^16.4.7",
     "fastify": "^5.2.1",
     "pg": "^8.16.3",
-    "zod": "^3.24.2"
+    "zod": "^3.24.2",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.13.4",
     "@types/pg": "^8.15.5",
     "tsx": "^4.19.3",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "@types/web-push": "^3.6.4"
   }
 }
