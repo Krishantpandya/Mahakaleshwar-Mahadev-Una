@@ -59,7 +59,7 @@ The migration runner records filenames and SHA-256 checksums in schema_migration
 The initial schema has been applied to Neon project mankaleshwar-mahadev (PostgreSQL 17, AWS Singapore). Photo upload time is stored separately in uploaded_at and is the date used by the public photo filters. Never commit database credentials or admin secrets.
 
 ## Storage
-The selected media storage is a private Backblaze B2 bucket. The storage integration and short-lived media URL generation are not implemented yet. Do not treat a private-bucket object URL or a presigned URL as a permanent public media URL.
+The selected media storage is a private Backblaze B2 bucket. Storage keys are the durable database references. Media URL columns are optional for compatibility and must not contain long-lived assumptions about private objects; the backend will generate short-lived download/view URLs when the B2 integration is implemented. The storage integration is not implemented yet.
 
 ## Remaining implementation
 - Admin photo and announcement management APIs
