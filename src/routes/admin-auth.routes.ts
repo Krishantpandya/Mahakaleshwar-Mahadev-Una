@@ -21,7 +21,21 @@ async function verifyPassword(password: string, stored: string): Promise<boolean
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
+function hasTrustedOrigin(request: FastifyRequest): boolean {
+  const origin = request.headers.origin;
+  if (typeof origin !== "string") return env.nodeEnv !== "production";
+  return env.corsOrigins.includes(origin);
+}
+
+async function rejectUntrustedOrigin(request: FastifyRequest, reply: FastifyReply): Promise<boolean> {
+  if (hasTrustedOrigin(request)) return false;
+  await reply.code(403).send({ error: "Untrusted request origin" });
+  return true;
+}
+
 export async function requireAdmin(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  if (!["GET", "HEAD", "OPTIONS"].includes(request.method) &&
+      await rejectUntrustedOrigin(request, reply)) return;
   if (!database) {
     await reply.code(503).send({ error: "Database is not configured" });
     return;
@@ -52,6 +66,7 @@ declare module "fastify" {
 
 export const adminAuthRoutes: FastifyPluginAsync = async (app) => {
   app.post("/login", { config: { rateLimit: { max: 5, timeWindow: "15 minutes" } } }, async (request, reply) => {
+    if (await rejectUntrustedOrigin(request, reply)) return;
     if (!database) return reply.code(503).send({ error: "Database is not configured" });
     const parsed = credentialsSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid email or password format" });
@@ -75,6 +90,7 @@ export const adminAuthRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/logout", async (request, reply) => {
+    if (await rejectUntrustedOrigin(request, reply)) return;
     const token = request.cookies[env.adminSessionCookie];
     if (database && token) await database.query("DELETE FROM admin_sessions WHERE token_hash = $1", [hashToken(token)]);
     reply.clearCookie(env.adminSessionCookie, { path: "/" });
