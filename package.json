@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "admin:create": "tsx src/scripts/create-admin.ts",
     "db:migrate": "tsx src/scripts/migrate.ts",
-    "test:unit": "tsx --test tests/*.test.ts",
+    "test:unit": "tsx --test tests/*.unit.test.ts",
     "test:integration": "tsx --test tests/*.integration.test.ts"
   },
   "dependencies": {
