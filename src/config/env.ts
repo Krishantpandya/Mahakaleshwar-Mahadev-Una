@@ -18,6 +18,9 @@ const envSchema = z.object({
   B2_KEY_ID: optionalText,
   B2_APPLICATION_KEY: optionalText,
   B2_SIGNED_URL_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
+  VAPID_PUBLIC_KEY: optionalText,
+  VAPID_PRIVATE_KEY: optionalText,
+  VAPID_SUBJECT: z.string().url().optional(),
   MAX_MEDIA_UPLOAD_BYTES: z.coerce.number().int().min(1_000_000).max(100_000_000).default(25_000_000)
 }).superRefine((value, context) => {
   if (value.NODE_ENV === "production" && !value.DATABASE_URL) {
@@ -27,6 +30,14 @@ const envSchema = z.object({
   const count = b2.filter(Boolean).length;
   if (count !== 0 && count !== b2.length) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["B2_ENDPOINT"], message: "Configure all five B2 settings together" });
+  }
+  const vapid = [value.VAPID_PUBLIC_KEY, value.VAPID_PRIVATE_KEY, value.VAPID_SUBJECT];
+  const vapidCount = vapid.filter(Boolean).length;
+  if (vapidCount !== 0 && vapidCount !== vapid.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["VAPID_PUBLIC_KEY"], message: "Configure VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, and VAPID_SUBJECT together" });
+  }
+  if (value.VAPID_SUBJECT && !/^(mailto:|https:\/\/)/.test(value.VAPID_SUBJECT)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["VAPID_SUBJECT"], message: "VAPID_SUBJECT must be a mailto: address or HTTPS URL" });
   }
   if (value.B2_ENDPOINT && new URL(value.B2_ENDPOINT).protocol !== "https:") {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["B2_ENDPOINT"], message: "B2_ENDPOINT must use HTTPS" });
@@ -47,5 +58,6 @@ export const env = {
   b2Endpoint: parsed.data.B2_ENDPOINT, b2Region: parsed.data.B2_REGION, b2Bucket: parsed.data.B2_BUCKET,
   b2KeyId: parsed.data.B2_KEY_ID, b2ApplicationKey: parsed.data.B2_APPLICATION_KEY,
   b2SignedUrlTtlSeconds: parsed.data.B2_SIGNED_URL_TTL_SECONDS,
+  vapidPublicKey: parsed.data.VAPID_PUBLIC_KEY, vapidPrivateKey: parsed.data.VAPID_PRIVATE_KEY, vapidSubject: parsed.data.VAPID_SUBJECT,
   maxMediaUploadBytes: parsed.data.MAX_MEDIA_UPLOAD_BYTES
 };
