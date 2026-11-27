@@ -6,6 +6,7 @@ import { database } from "../database.js";
 import { env } from "../config/env.js";
 
 const scrypt = promisify(scryptCallback);
+const DUMMY_PASSWORD_SALT = "mankaleshwar-invalid-admin-login";
 const credentialsSchema = z.object({ email: z.string().email().max(254), password: z.string().min(1).max(200) });
 
 function hashToken(token: string): string {
@@ -58,7 +59,9 @@ export const adminAuthRoutes: FastifyPluginAsync = async (app) => {
     await database.query("DELETE FROM admin_sessions WHERE expires_at <= NOW()");
     const result = await database.query("SELECT id, email, password_hash FROM admins WHERE lower(email) = lower($1)", [parsed.data.email]);
     const admin = result.rows[0] as { id: string; email: string; password_hash: string } | undefined;
-    const valid = admin ? await verifyPassword(parsed.data.password, admin.password_hash) : false;
+    const valid = admin
+      ? await verifyPassword(parsed.data.password, admin.password_hash)
+      : (await scrypt(parsed.data.password, DUMMY_PASSWORD_SALT, 64), false);
     if (!valid || !admin) return reply.code(401).send({ error: "Invalid email or password" });
 
     const token = randomBytes(32).toString("base64url");
