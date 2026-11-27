@@ -19,10 +19,10 @@ export async function notifyChannel(
   channel: NotificationChannel,
   payload: { title: string; body: string; url: string },
   logger: FastifyBaseLogger
-): Promise<void> {
+): Promise<{ attempted: number; sent: number; failed: number; skipped?: boolean }> {
   if (!database || !vapidConfigured) {
     logger.warn({ channel }, "Push notification skipped: database or VAPID configuration is unavailable");
-    return;
+    return { attempted: 0, sent: 0, failed: 0, skipped: true };
   }
 
   const result = await database.query(
@@ -77,4 +77,5 @@ export async function notifyChannel(
   }
 
   logger.info({ channel, attempted: subscriptions.length, sent, failed }, "Push notification batch completed");
+  return { attempted: subscriptions.length, sent, failed };
 }
