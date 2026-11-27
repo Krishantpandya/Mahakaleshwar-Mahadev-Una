@@ -74,13 +74,16 @@ At least message text or a poster image is required. Text-only announcements do 
 
 ## Browser push notifications
 
-The backend uses the standard Web Push protocol. Publishing a photo queues a notification for subscribers of the `photos` channel; publishing an announcement queues one for subscribers of the `announcements` channel. A PostgreSQL outbox stores pending notifications and a background worker retries delivery with exponential backoff (up to 10 attempts), so queued notifications survive API process restarts. Expired endpoints returning 404 or 410 are removed. Delivery remains queued until all three VAPID settings are configured. The content insert and outbox enqueue are currently separate database operations, so a database failure between them can still leave published content without a queued notification.
+The backend uses the standard Web Push protocol. Publishing a photo queues a notification for subscribers of the `photos` channel; publishing an announcement queues one for subscribers of the `announcements` channel. A PostgreSQL outbox stores pending notifications and a background worker retries delivery with exponential backoff (up to 10 attempts), so queued notifications survive API process restarts. Expired endpoints returning 404 or 410 are removed. Delivery remains queued until all three VAPID settings are configured. Content publication and outbox insertion use the same PostgreSQL transaction, so they either both commit or both roll back. Push subscription endpoints are restricted to known browser push providers (Google FCM, Mozilla, Apple, and Microsoft) to reduce server-side request forgery risk.
 
 - `VAPID_PUBLIC_KEY`
 - `VAPID_PRIVATE_KEY`
 - `VAPID_SUBJECT` — a `mailto:` contact or HTTPS URL
 
 Generate VAPID keys with a trusted Web Push key-generation tool and configure these values as encrypted hosting secrets. Never commit private keys. Browser clients must use the matching public key when subscribing.
+
+## Production CORS
+Set `CORS_ORIGINS` to a comma-separated list of exact frontend origins (scheme + hostname + optional port; no paths or trailing slashes). Production requires HTTPS origins and rejects localhost and wildcard origins.
 
 ## Database
 Migrations are append-only under database/migrations. The migration runner records SHA-256 checksums and rejects edits to already-applied migrations. The Neon schema has been applied; production DATABASE_URL still belongs in the backend host's secret environment configuration.
