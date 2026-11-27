@@ -347,6 +347,55 @@ test("admin sessions authenticate, reject invalid sessions, and logout revokes t
     const cookie = login.cookies.find((item) => item.name === "mankaleshwar_admin_session");
     assert.ok(cookie?.value);
 
+    const boundary = "----mankaleshwar-integration-boundary";
+    const announcementBody = [
+      `--${boundary}`,
+      'Content-Disposition: form-data; name="title"',
+      "",
+      "Integration announcement",
+      `--${boundary}`,
+      'Content-Disposition: form-data; name="message"',
+      "",
+      "This announcement is published through the admin API test.",
+      `--${boundary}--`,
+      ""
+    ].join("\r\n");
+    const announcementResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/admin/announcements",
+      headers: {
+        origin: "http://localhost:5173",
+        "content-type": `multipart/form-data; boundary=${boundary}`
+      },
+      cookies: { mankaleshwar_admin_session: cookie.value },
+      payload: announcementBody
+    });
+    assert.equal(announcementResponse.statusCode, 201);
+    const announcementId = announcementResponse.json<{ data: { id: string } }>().data.id;
+    const announcementOutbox = await database.query(
+      "SELECT channel, payload FROM notification_outbox WHERE payload->>'title' = $1",
+      ["Integration announcement"]
+    );
+    assert.equal(announcementOutbox.rowCount, 1);
+    assert.equal(announcementOutbox.rows[0].channel, "announcements");
+    await database.query("DELETE FROM announcements WHERE id = $1", [announcementId]);
+    await database.query(
+      "DELETE FROM notification_outbox WHERE payload->>'title' = $1",
+      ["Integration announcement"]
+    );
+
+    const unavailablePhotoUpload = await app.inject({
+      method: "POST",
+      url: "/api/v1/admin/photos",
+      headers: {
+        origin: "http://localhost:5173",
+        "content-type": `multipart/form-data; boundary=${boundary}`
+      },
+      cookies: { mankaleshwar_admin_session: cookie.value },
+      payload: `--${boundary}--\r\n`
+    });
+    assert.equal(unavailablePhotoUpload.statusCode, 503);
+
     const me = await app.inject({
       method: "GET", url: "/api/v1/admin/auth/me",
       cookies: { mankaleshwar_admin_session: cookie.value }
