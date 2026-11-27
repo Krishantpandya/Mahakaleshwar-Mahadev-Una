@@ -14,8 +14,8 @@ test("published photo comments support presets, custom text, immediate listing, 
 
   try {
     await database.query(
-      "INSERT INTO photos (id, storage_key, mime_type, published_at) VALUES ($1, $2, $3, NOW())",
-      [photoId, `integration-tests/${photoId}.jpg`, "image/jpeg"]
+      "INSERT INTO photos (id, storage_key, media_url, mime_type, published_at) VALUES ($1, $2, $3, $4, NOW())",
+      [photoId, `integration-tests/${photoId}.jpg`, `https://media.example.test/${photoId}.jpg`, "image/jpeg"]
     );
 
     const presetsResponse = await app.inject({
