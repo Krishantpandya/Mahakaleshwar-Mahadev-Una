@@ -18,8 +18,11 @@ export const announcementRoutes: FastifyPluginAsync = async (app) => {
       "FROM announcements WHERE published_at IS NOT NULL ORDER BY published_at DESC, id DESC LIMIT $1 OFFSET $2",
       [limit, offset]
     );
-    if (result.rows.some((row) => row.poster_storage_key) && !isB2Configured()) {\n      return reply.code(503).send({ error: "Backblaze B2 storage is not configured" });\n    }\n    const data = await Promise.all(result.rows.map(async (row) => {
-      const posterUrl = row.poster_storage_key
+    if (result.rows.some((row) => row.poster_storage_key && !row.poster_media_url) && !isB2Configured()) {
+      return reply.code(503).send({ error: "Backblaze B2 storage is not configured" });
+    }
+    const data = await Promise.all(result.rows.map(async (row) => {
+      const posterUrl = row.poster_storage_key && isB2Configured()
         ? await createB2ReadUrl(row.poster_storage_key as string)
         : row.poster_media_url;
       const { poster_storage_key: _storageKey, poster_media_url: _posterMediaUrl, ...announcement } = row;
