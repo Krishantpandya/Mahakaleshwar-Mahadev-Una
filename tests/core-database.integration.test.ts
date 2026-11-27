@@ -20,6 +20,12 @@ after(async () => {
   await app.close();
 });
 
+test("readiness endpoint verifies the database connection", async () => {
+  const response = await app.inject({ method: "GET", url: "/api/v1/ready" });
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json(), { status: "ready", database: "connected" });
+});
+
 test("photo listing filters by upload date and guest likes are idempotent/removable", async () => {
   const photoId = randomUUID();
   const visitorId = randomUUID();
