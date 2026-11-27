@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID, randomBytes, scrypt as scryptCallback } from "node:crypto";
 import { promisify } from "node:util";
-import { after, test } from "node:test";
+import { after, before, test } from "node:test";
 import { buildApp } from "../src/app.js";
 import { database } from "../src/database.js";
 
@@ -10,7 +10,10 @@ const scrypt = promisify(scryptCallback);
 if (!database) throw new Error("DATABASE_URL must be set for integration tests");
 
 const app = buildApp();
-await app.ready();
+
+before(async () => {
+  await app.ready();
+});
 
 after(async () => {
   await app.close();
