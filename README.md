@@ -31,7 +31,8 @@ All endpoints are under /api/v1.
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| GET | /health | Process health check |
+| GET | /health | Process liveness check |
+| GET | /ready | Database readiness check (503 when unavailable) |
 | GET | /photos | Published photos; upload-date filters; returns temporary B2 URLs |
 | POST | /photos/:photoId/likes | Add an idempotent guest like |
 | DELETE | /photos/:photoId/likes | Remove the guest like |
@@ -84,11 +85,12 @@ Generate VAPID keys with a trusted Web Push key-generation tool and configure th
 ## Database
 Migrations are append-only under database/migrations. The migration runner records SHA-256 checksums and rejects edits to already-applied migrations. The Neon schema has been applied; production DATABASE_URL still belongs in the backend host's secret environment configuration.
 
-## Remaining backend work
+## Remaining backend verification and operations
 - Admin editing/deletion lifecycle (rules not yet decided)
 - Comment moderation/reporting and stronger abuse controls (policy not yet decided)
 - Editing/deleting media and announcements (lifecycle rules not yet decided)
-- Atomic content/outbox transaction (close the small enqueue failure window)
 - B2 integration tests and live verification against the configured private bucket
+- Notification delivery integration tests with real VAPID credentials and browser subscriptions
+- Production monitoring/alerting and backup/restore drill
 - Hosting configuration and deployment
 - Pujari/admin contact workflow (not decided)
