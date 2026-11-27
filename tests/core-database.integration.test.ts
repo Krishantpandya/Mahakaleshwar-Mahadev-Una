@@ -80,11 +80,11 @@ test("announcements list exposes only published records", async () => {
   }
 });
 
-test("push subscription upsert replaces channel selections atomically", async () => {
+test("push subscription upsert replaces channel selections atomically and rejects unsafe endpoints", async () => {
   const endpoint = `https://push.example.test/subscription/${randomUUID()}`;
   const payload = {
     endpoint,
-    keys: { p256dh: "test-public-key", auth: "test-auth-key" },
+    keys: { p256dh: "AbCdEf0123456789_-", auth: "AbCdEf0123456789_-" },
     channels: ["photos", "announcements"]
   };
 
@@ -111,6 +111,19 @@ test("push subscription upsert replaces channel selections atomically", async ()
       payload: { ...payload, channels: ["photos", "photos"] }
     });
     assert.equal(invalid.statusCode, 400);
+
+    for (const unsafeEndpoint of [
+      "http://push.example.test/subscription",
+      "https://localhost/subscription",
+      "https://127.0.0.1/subscription",
+      "https://user:pass@push.example.test/subscription"
+    ]) {
+      const unsafe = await app.inject({
+        method: "PUT", url: "/api/v1/push-subscriptions",
+        payload: { ...payload, endpoint: unsafeEndpoint }
+      });
+      assert.equal(unsafe.statusCode, 400, `unsafe endpoint should be rejected: ${unsafeEndpoint}`);
+    }
   } finally {
     await database.query("DELETE FROM push_subscriptions WHERE endpoint = $1", [endpoint]);
   }
