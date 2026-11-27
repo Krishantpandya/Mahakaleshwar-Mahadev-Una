@@ -6,6 +6,7 @@ import { env } from "../config/env.js";
 import { requireAdmin } from "./admin-auth.routes.js";
 import { createB2ReadUrl, deleteB2Object, isB2Configured, uploadB2Object } from "../storage/b2.js";
 import { matchesImageSignature } from "../storage/image-validation.js";
+import { notifyChannel } from "../notifications/web-push.js";
 
 const imageTypes: Record<string, string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif"
@@ -43,6 +44,15 @@ export const adminContentRoutes: FastifyPluginAsync = async (app) => {
         "RETURNING id, mime_type, file_size_bytes, caption, taken_at, published_at, uploaded_at",
         [id, key, file.mimetype, body.length, query.data.caption ?? null, query.data.takenAt ?? null, request.admin?.id ?? null]
       );
+      try {
+        await notifyChannel("photos", {
+          title: "New temple photo",
+          body: query.data.caption || "A new photo has been published.",
+          url: "/"
+        }, request.log);
+      } catch (notificationError) {
+        request.log.error({ err: notificationError, photoId: id }, "Photo was published but notification processing failed");
+      }
       return reply.code(201).send({ data: { ...result.rows[0], media_url: mediaUrl } });
     } catch (error) {
       await cleanupObject(app, key);
@@ -83,6 +93,15 @@ export const adminContentRoutes: FastifyPluginAsync = async (app) => {
         "VALUES ($1, $2, $3, $4, NULL, NOW(), $5) RETURNING id, title, message, published_at",
         [id, title, message, key, request.admin?.id ?? null]
       );
+      try {
+        await notifyChannel("announcements", {
+          title: title || "Temple announcement",
+          body: message || "A new announcement has been published.",
+          url: "/"
+        }, request.log);
+      } catch (notificationError) {
+        request.log.error({ err: notificationError, announcementId: id }, "Announcement was published but notification processing failed");
+      }
       return reply.code(201).send({ data: { ...result.rows[0], poster_media_url: posterUrl } });
     } catch (error) {
       if (key) await cleanupObject(app, key);
