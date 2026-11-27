@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import { after, before, test } from "node:test";
 import { buildApp } from "../src/app.js";
 import { database } from "../src/database.js";
+import { enqueueNotification } from "../src/notifications/outbox.js";
 
 const scrypt = promisify(scryptCallback);
 
@@ -127,6 +128,26 @@ test("push subscription upsert replaces channel selections atomically and reject
   } finally {
     await database.query("DELETE FROM push_subscriptions WHERE endpoint = $1", [endpoint]);
   }
+});
+
+test("published notifications are persisted in the retryable outbox", async () => {
+  const payload = {
+    title: "Outbox integration test",
+    body: "A queued notification",
+    url: "/"
+  };
+  await enqueueNotification("photos", payload);
+  const stored = await database.query(
+    "SELECT channel, payload, attempts, delivered_at FROM notification_outbox " +
+    "WHERE payload->>'title' = $1 ORDER BY created_at DESC LIMIT 1",
+    [payload.title]
+  );
+  assert.equal(stored.rowCount, 1);
+  assert.equal(stored.rows[0].channel, "photos");
+  assert.deepEqual(stored.rows[0].payload, payload);
+  assert.equal(stored.rows[0].attempts, 0);
+  assert.equal(stored.rows[0].delivered_at, null);
+  await database.query("DELETE FROM notification_outbox WHERE payload->>'title' = $1", [payload.title]);
 });
 
 test("admin sessions authenticate, reject invalid sessions, and logout revokes the session", async () => {
