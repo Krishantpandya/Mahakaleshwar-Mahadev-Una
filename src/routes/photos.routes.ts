@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { database } from "../database.js";
-import { createB2ReadUrl } from "../storage/b2.js";
+import { createB2ReadUrl, isB2Configured } from "../storage/b2.js";
 
 const listQuerySchema = z.object({
   from: z.string().date().optional(), to: z.string().date().optional(),
@@ -29,7 +29,7 @@ export const photoRoutes: FastifyPluginAsync = async (app) => {
       "FROM photos WHERE " + filters.join(" AND ") +
       " ORDER BY uploaded_at DESC, id DESC LIMIT $" + limitIndex + " OFFSET $" + offsetIndex;
     const result = await database.query(sql, values);
-    const data = await Promise.all(result.rows.map(async (row) => {
+    if (result.rows.some((row) => row.storage_key) && !isB2Configured()) {\n      return reply.code(503).send({ error: "Backblaze B2 storage is not configured" });\n    }\n    const data = await Promise.all(result.rows.map(async (row) => {
       const mediaUrl = row.storage_key ? await createB2ReadUrl(row.storage_key as string) : row.media_url;
       const { storage_key: _storageKey, media_url: _mediaUrl, ...photo } = row;
       return { ...photo, media_url: mediaUrl };
