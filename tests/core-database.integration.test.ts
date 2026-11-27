@@ -223,11 +223,11 @@ test("notification worker marks successful delivery and retries failures with bo
 
     // Re-arm the two failure cases after the success batch.
     await database.query(
-      "UPDATE notification_outbox SET claimed_at = NULL, available_at = NOW(), attempts = 0 WHERE id = $1",
+      "UPDATE notification_outbox SET delivered_at = NULL, dead_at = NULL, claimed_at = NULL, available_at = NOW(), attempts = 0 WHERE id = $1",
       [failed.rows[0].id]
     );
     await database.query(
-      "UPDATE notification_outbox SET claimed_at = NULL, available_at = NOW() WHERE id = $1",
+      "UPDATE notification_outbox SET delivered_at = NULL, dead_at = NULL, claimed_at = NULL, available_at = NOW() WHERE id = $1",
       [dead.rows[0].id]
     );
     await processNotificationOutbox(
