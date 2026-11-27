@@ -6,7 +6,7 @@ import { env } from "../config/env.js";
 import { requireAdmin } from "./admin-auth.routes.js";
 import { createB2ReadUrl, deleteB2Object, isB2Configured, uploadB2Object } from "../storage/b2.js";
 import { matchesImageSignature } from "../storage/image-validation.js";
-import { notifyChannel } from "../notifications/web-push.js";
+import { enqueueNotification } from "../notifications/outbox.js";
 
 const imageTypes: Record<string, string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif"
@@ -48,11 +48,11 @@ export const adminContentRoutes: FastifyPluginAsync = async (app) => {
         [id, key, file.mimetype, body.length, query.data.caption ?? null, query.data.takenAt ?? null, request.admin?.id ?? null]
       );
       try {
-        await notifyChannel("photos", {
+        await enqueueNotification("photos", {
           title: "New temple photo",
           body: query.data.caption || "A new photo has been published.",
           url: "/"
-        }, request.log);
+        });
       } catch (notificationError) {
         request.log.error({ err: notificationError, photoId: id }, "Photo was published but notification processing failed");
       }
@@ -105,11 +105,11 @@ export const adminContentRoutes: FastifyPluginAsync = async (app) => {
         [id, title, message, key, request.admin?.id ?? null]
       );
       try {
-        await notifyChannel("announcements", {
+        await enqueueNotification("announcements", {
           title: title || "Temple announcement",
           body: message || "A new announcement has been published.",
           url: "/"
-        }, request.log);
+        });
       } catch (notificationError) {
         request.log.error({ err: notificationError, announcementId: id }, "Announcement was published but notification processing failed");
       }
