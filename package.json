@@ -3,9 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "Backend API for the Mankaleshwar Mahadev Temple website",
-  "engines": {
-    "node": ">=22"
-  },
+  "engines": { "node": ">=22" },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
@@ -16,19 +14,22 @@
     "test:integration": "tsx --test tests/*.integration.test.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.900.0",
+    "@aws-sdk/s3-request-presigner": "^3.900.0",
+    "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^10.1.0",
     "@fastify/helmet": "^12.0.1",
+    "@fastify/multipart": "^9.0.3",
     "@fastify/rate-limit": "^10.2.1",
     "dotenv": "^16.4.7",
     "fastify": "^5.2.1",
-    "zod": "^3.24.2",
     "pg": "^8.16.3",
-    "@fastify/cookie": "^11.0.2"
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@types/node": "^22.13.4",
+    "@types/pg": "^8.15.5",
     "tsx": "^4.19.3",
-    "typescript": "^5.7.3",
-    "@types/pg": "^8.15.5"
+    "typescript": "^5.7.3"
   }
 }

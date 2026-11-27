@@ -3,6 +3,7 @@ import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
+import multipart from "@fastify/multipart";
 import { env } from "./config/env.js";
 import { database } from "./database.js";
 import { healthRoutes } from "./routes/health.routes.js";
@@ -11,6 +12,7 @@ import { commentRoutes } from "./routes/comments.routes.js";
 import { announcementRoutes } from "./routes/announcements.routes.js";
 import { pushSubscriptionRoutes } from "./routes/push-subscriptions.routes.js";
 import { adminAuthRoutes } from "./routes/admin-auth.routes.js";
+import { adminContentRoutes } from "./routes/admin-content.routes.js";
 
 export function buildApp() {
   const app = Fastify({
@@ -20,19 +22,18 @@ export function buildApp() {
     },
     trustProxy: false
   });
-
   app.register(helmet);
   app.register(cookie);
   app.register(cors, { origin: env.corsOrigins, credentials: true });
   app.register(rateLimit, { max: 100, timeWindow: "1 minute" });
-
+  app.register(multipart, { limits: { fileSize: env.maxMediaUploadBytes, files: 1 } });
   app.register(healthRoutes, { prefix: "/api/v1" });
   app.register(photoRoutes, { prefix: "/api/v1" });
   app.register(commentRoutes, { prefix: "/api/v1" });
   app.register(announcementRoutes, { prefix: "/api/v1" });
   app.register(pushSubscriptionRoutes, { prefix: "/api/v1" });
   app.register(adminAuthRoutes, { prefix: "/api/v1/admin/auth" });
-
+  app.register(adminContentRoutes, { prefix: "/api/v1" });
   app.addHook("onClose", async () => { await database?.end(); });
   app.setErrorHandler((error, request, reply) => {
     const normalizedError = error instanceof Error ? error : new Error(String(error));

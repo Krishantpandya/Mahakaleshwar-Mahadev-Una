@@ -3,17 +3,17 @@
 TypeScript API service for the Mankaleshwar Mahadev Temple website.
 
 ## Stack
-- Node.js 22+
-- Fastify 5 and TypeScript
+- Node.js 22+, Fastify 5 and TypeScript
 - PostgreSQL 17 hosted on Neon
+- Backblaze B2 private bucket through its S3-compatible API
 - Zod request and environment validation
 
 ## Run locally
 1. Copy .env.example to .env.
 2. Set DATABASE_URL to a PostgreSQL connection string (use a pooled Neon URL for API traffic).
-3. Install dependencies with npm install.
-4. Run npm run db:migrate to apply pending migrations.
-5. Run npm run dev.
+3. Configure the five Backblaze variables below.
+4. Install dependencies with npm install.
+5. Run npm run db:migrate, then npm run dev.
 
 ## Commands
 - npm run dev — development server with reload
@@ -22,7 +22,7 @@ TypeScript API service for the Mankaleshwar Mahadev Temple website.
 - npm start — run compiled server
 - npm run db:migrate — apply pending SQL migrations and record checksums
 - npm run test:integration — run PostgreSQL-backed API integration tests (requires DATABASE_URL)
-- npm run admin:create — one-time creation of the single admin account; requires DATABASE_URL, ADMIN_EMAIL, and ADMIN_PASSWORD (12+ characters)
+- npm run admin:create — one-time single-admin provisioning; requires DATABASE_URL, ADMIN_EMAIL, ADMIN_PASSWORD (12+ characters)
 
 ## API v1
 All endpoints are under /api/v1.
@@ -30,49 +30,51 @@ All endpoints are under /api/v1.
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
 | GET | /health | Process health check |
-| GET | /photos | List published photos; from/to filter by upload date; supports limit, offset |
-| POST | /photos/:photoId/likes | Add an idempotent guest like using a client-generated visitorId UUID |
-| DELETE | /photos/:photoId/likes | Remove the guest's like using the same visitorId UUID |
-| GET | /comments/predefined | List active predefined guest comment options |
-| GET | /photos/:photoId/comments | List comments for a published photo; supports limit, offset |
-| POST | /photos/:photoId/comments | Publish a predefined or custom guest comment immediately |
-| GET | /announcements | List published announcements; supports limit, offset |
-| PUT | /push-subscriptions | Register/update a browser push subscription for one or both notification channels |
-| POST | /admin/auth/login | Authenticate the single admin and issue an HttpOnly session cookie |
-| POST | /admin/auth/logout | Revoke the current admin session |
-| GET | /admin/auth/me | Check the current admin session |
+| GET | /photos | Published photos; upload-date filters; returns temporary B2 URLs |
+| POST | /photos/:photoId/likes | Add an idempotent guest like |
+| DELETE | /photos/:photoId/likes | Remove the guest like |
+| GET | /comments/predefined | Active predefined guest comments |
+| GET | /photos/:photoId/comments | List comments for a published photo |
+| POST | /photos/:photoId/comments | Publish a guest comment immediately |
+| GET | /announcements | Published announcements with temporary B2 poster URLs |
+| PUT | /push-subscriptions | Register/update browser push channel subscriptions |
+| POST | /admin/auth/login | Admin login |
+| POST | /admin/auth/logout | Revoke admin session |
+| GET | /admin/auth/me | Check admin session |
+| POST | /admin/photos | Admin-only photo upload and immediate publication |
+| POST | /admin/announcements | Admin-only announcement text/poster creation and immediate publication |
 
-## Single-admin security
-Apply database migration 002 before enabling admin authentication. It creates server-side sessions and a database constraint that permits only one admin row. Admin passwords are hashed with Node.js scrypt and a random salt; raw passwords are never stored. Session tokens are random, stored only as SHA-256 hashes, and delivered in HttpOnly, SameSite=Strict cookies (Secure in production). Login is rate-limited.
+## Admin authentication
+Passwords are hashed with Node.js scrypt and random salt. Session tokens are random, stored only as SHA-256 hashes, and delivered in HttpOnly, SameSite=Strict cookies (Secure in production). Login is rate-limited. Provision the single account once using DATABASE_URL, ADMIN_EMAIL, and ADMIN_PASSWORD through the one-time admin:create command. Do not commit or expose these secrets.
 
-Provision the account once using the deployment environment's secret variables: DATABASE_URL, ADMIN_EMAIL, and ADMIN_PASSWORD (minimum 12 characters), then run npm run admin:create. Do not leave ADMIN_PASSWORD configured after provisioning. Do not expose the provisioning command as a public HTTP endpoint.
+## Private Backblaze B2 storage
+The backend uses Backblaze's S3-compatible API. Keep the bucket private; this integration does not set public ACLs. Object keys are generated server-side under photos/ and announcements/. PostgreSQL stores those permanent keys, never expiring URLs. Public list endpoints generate presigned GET URLs when content is requested. Existing legacy rows with a media_url and no storage_key continue to return their original URL.
 
-The content endpoints require DATABASE_URL. If it is not configured, they return HTTP 503 rather than pretending the database is available.
+Configure all five values together in the backend hosting provider's encrypted environment settings:
+- B2_ENDPOINT — HTTPS S3 endpoint for the bucket's region, exactly as shown by Backblaze
+- B2_REGION — matching S3 region identifier
+- B2_BUCKET — exact private bucket name
+- B2_KEY_ID — Backblaze application key ID
+- B2_APPLICATION_KEY — corresponding secret
 
-## Guest comments
-Guests do not need accounts. The predefined comments endpoint returns active options; the POST endpoint accepts exactly one of predefinedCommentId or custom body, snapshots the selected text into the comment row, and returns the newly published comment immediately. The comments list is restricted to published photos. The confirmed predefined option "Har Har Mahadev" is seeded by migration 003.
+Create an application key scoped to this bucket, with only the required object read/write/delete capabilities. Never put the key ID or secret in GitHub source files or chat. Endpoint and region must match the bucket. Partial configuration fails startup validation.
 
-The visitorId is an opaque client-generated UUID, not authenticated identity. It can be spoofed, so it must not be treated as proof of a unique person. Stronger abuse prevention depends on a product policy decision and is not claimed by this API.
+B2_SIGNED_URL_TTL_SECONDS defaults to 900 seconds (15 minutes; allowed range 60–3600). MAX_MEDIA_UPLOAD_BYTES defaults to 25,000,000 bytes. Accepted uploads are JPEG, PNG, WebP, and AVIF; SVG is not accepted.
 
-## Browser notification subscriptions
-PUT /push-subscriptions stores browser subscriptions and channel choices only. Push delivery, VAPID key management, retries, and automatic publish triggers remain separate implementation work.
+Photo upload uses multipart/form-data with one file field:
+POST /api/v1/admin/photos?caption=...&takenAt=...
+The authenticated admin uploads and immediately publishes the image. The database stores the object key and the API returns a signed URL. If database insertion fails after upload, the backend attempts to delete the orphaned object.
 
-## Database and migrations
-SQL migrations are stored in database/migrations and must be append-only after they have been applied. Run npm run db:migrate before starting a deployment.
+Announcement publication uses multipart/form-data with optional title, message, and one poster image:
+POST /api/v1/admin/announcements
+At least message text or a poster image is required. Text-only announcements do not require B2. Scheduling, editing, and deletion policies are not assumed or implemented.
 
-The migration runner records filenames and SHA-256 checksums in schema_migrations, applies each pending migration transactionally, and rejects edited applied migrations. On an already-initialized database, it recognizes the existing 001/002 schema and baselines those migrations before applying new ones. If it detects a partial schema, it stops rather than guessing.
+## Database
+Migrations are append-only under database/migrations. The migration runner records SHA-256 checksums and rejects edits to already-applied migrations. The Neon schema has been applied; production DATABASE_URL still belongs in the backend host's secret environment configuration.
 
-The initial schema has been applied to Neon project mankaleshwar-mahadev (PostgreSQL 17, AWS Singapore). Photo upload time is stored separately in uploaded_at and is the date used by the public photo filters. Never commit database credentials or admin secrets.
-
-CI uses an ephemeral PostgreSQL 17 service, applies migrations to an empty database, runs the migration command a second time to verify idempotency, and runs the API integration tests. This does not replace testing against the production Neon database.
-
-## Storage
-The selected media storage is a private Backblaze B2 bucket. Storage keys are the durable database references. Media URL columns are optional for compatibility and must not contain long-lived assumptions about private objects; the backend will generate short-lived download/view URLs when the B2 integration is implemented. The storage integration is not implemented yet.
-
-## Remaining implementation
-- Admin photo and announcement management APIs
-- Backblaze B2 private media integration and secure URL delivery
+## Remaining backend work
 - Browser push delivery and automatic publish triggers
-- Broader automated API/database integration tests for photos, likes, admin sessions, announcements, and push subscriptions
-- Production hosting configuration and live deployment
+- Editing/deleting media and announcements (lifecycle rules not yet decided)
+- B2 integration tests and live verification against the configured private bucket
+- Hosting configuration and deployment
 - Pujari/admin contact workflow (not decided)
