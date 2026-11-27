@@ -29,8 +29,13 @@ export const photoRoutes: FastifyPluginAsync = async (app) => {
       "FROM photos WHERE " + filters.join(" AND ") +
       " ORDER BY uploaded_at DESC, id DESC LIMIT $" + limitIndex + " OFFSET $" + offsetIndex;
     const result = await database.query(sql, values);
-    if (result.rows.some((row) => row.storage_key) && !isB2Configured()) {\n      return reply.code(503).send({ error: "Backblaze B2 storage is not configured" });\n    }\n    const data = await Promise.all(result.rows.map(async (row) => {
-      const mediaUrl = row.storage_key ? await createB2ReadUrl(row.storage_key as string) : row.media_url;
+    if (result.rows.some((row) => row.storage_key && !row.media_url) && !isB2Configured()) {
+      return reply.code(503).send({ error: "Backblaze B2 storage is not configured" });
+    }
+    const data = await Promise.all(result.rows.map(async (row) => {
+      const mediaUrl = row.storage_key && isB2Configured()
+        ? await createB2ReadUrl(row.storage_key as string)
+        : row.media_url;
       const { storage_key: _storageKey, media_url: _mediaUrl, ...photo } = row;
       return { ...photo, media_url: mediaUrl };
     }));
