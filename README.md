@@ -6,6 +6,7 @@ TypeScript API service for the Mankaleshwar Mahadev Temple website.
 - Node.js 22+, Fastify 5 and TypeScript
 - PostgreSQL 17 hosted on Neon
 - Backblaze B2 private bucket through its S3-compatible API
+- Sharp-based full image decoding with a 20-megapixel input limit
 - Zod request and environment validation
 - Browser Web Push using VAPID with separate Photos and Announcements channels
 
@@ -48,7 +49,7 @@ All endpoints are under /api/v1.
 | POST | /admin/announcements | Admin-only announcement text/poster creation and immediate publication |
 
 ## Admin authentication
-Passwords are hashed with Node.js scrypt and random salt. Session tokens are random, stored only as SHA-256 hashes, and delivered in HttpOnly, SameSite=Strict cookies (Secure in production). Login is rate-limited. Provision the single account once using DATABASE_URL, ADMIN_EMAIL, and ADMIN_PASSWORD through the one-time admin:create command. Do not commit or expose these secrets.
+Passwords are hashed with Node.js scrypt and random salt. Session tokens are random, stored only as SHA-256 hashes, and delivered in HttpOnly, SameSite=Strict cookies (Secure in production). Expired sessions are rejected. Login is rate-limited. Admin login, logout, and authenticated state-changing requests validate the Origin against CORS_ORIGINS; production rejects missing origins on these browser-session endpoints. Provision the single account once using DATABASE_URL, ADMIN_EMAIL, and ADMIN_PASSWORD through the one-time admin:create command. Do not commit or expose these secrets.
 
 ## Private Backblaze B2 storage
 The backend uses Backblaze's S3-compatible API. Keep the bucket private; this integration does not set public ACLs. Object keys are generated server-side under photos/ and announcements/. PostgreSQL stores those permanent keys, never expiring URLs. Public list endpoints generate presigned GET URLs when content is requested. Existing legacy rows with a media_url and no storage_key continue to return their original URL.
@@ -62,7 +63,7 @@ Configure all five values together in the backend hosting provider's encrypted e
 
 Create an application key scoped to this bucket, with only the required object read/write/delete capabilities. Never put the key ID or secret in GitHub source files or chat. Endpoint and region must match the bucket. Partial configuration fails startup validation.
 
-B2_SIGNED_URL_TTL_SECONDS defaults to 900 seconds (15 minutes; allowed range 60–3600). MAX_MEDIA_UPLOAD_BYTES defaults to 25,000,000 bytes. Accepted uploads are JPEG, PNG, WebP, and AVIF; SVG is not accepted.
+B2_SIGNED_URL_TTL_SECONDS defaults to 900 seconds (15 minutes; allowed range 60–3600). MAX_MEDIA_UPLOAD_BYTES defaults to 25,000,000 bytes. Accepted uploads are JPEG, PNG, WebP, and AVIF; SVG is not accepted. Uploads must pass both container-signature checks and full Sharp decoding, with a 20-megapixel input-pixel ceiling. The original file bytes are stored; decoding is used for validation, not image transformation.
 
 Photo upload uses multipart/form-data with one file field:
 POST /api/v1/admin/photos?caption=...&takenAt=...
@@ -92,7 +93,7 @@ Migrations are append-only under database/migrations. The migration runner recor
 - Admin editing/deletion lifecycle (rules not yet decided)
 - Comment moderation/reporting and stronger abuse controls (policy not yet decided)
 - Editing/deleting media and announcements (lifecycle rules not yet decided)
-- B2 integration tests and live verification against the configured private bucket
+- B2 integration tests with a mocked S3 transport and live verification against the configured private bucket
 - Notification delivery integration tests with real VAPID credentials and browser subscriptions
 - Production monitoring/alerting and backup/restore drill
 - Hosting configuration and deployment
