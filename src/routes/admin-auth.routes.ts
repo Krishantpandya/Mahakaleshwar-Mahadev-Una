@@ -55,6 +55,7 @@ export const adminAuthRoutes: FastifyPluginAsync = async (app) => {
     const parsed = credentialsSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid email or password format" });
 
+    await database.query("DELETE FROM admin_sessions WHERE expires_at <= NOW()");
     const result = await database.query("SELECT id, email, password_hash FROM admins WHERE lower(email) = lower($1)", [parsed.data.email]);
     const admin = result.rows[0] as { id: string; email: string; password_hash: string } | undefined;
     const valid = admin ? await verifyPassword(parsed.data.password, admin.password_hash) : false;
