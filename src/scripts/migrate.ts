@@ -46,15 +46,27 @@ async function loadMigrations(): Promise<Migration[]> {
 
 async function detectExistingSchema(client: PoolClient): Promise<"empty" | "complete" | "partial"> {
   const expectedTables = [
-    "admins",
-    "photos",
-    "photo_likes",
-    "photo_comments",
-    "announcements",
-    "push_subscriptions",
-    "push_subscription_channels",
-    "admin_sessions"
+    "admins", "photos", "photo_likes", "photo_comments",
+    "announcements", "push_subscriptions",
+    "push_subscription_channels", "admin_sessions"
   ];
+
+  const requiredColumns = [
+    ["admins", "id"], ["admins", "email"], ["admins", "password_hash"],
+    ["photos", "id"], ["photos", "storage_key"], ["photos", "media_url"],
+    ["photos", "mime_type"], ["photos", "published_at"],
+    ["photo_likes", "photo_id"], ["photo_likes", "visitor_id"],
+    ["photo_comments", "photo_id"], ["photo_comments", "visitor_id"], ["photo_comments", "body"],
+    ["announcements", "id"], ["announcements", "message"],
+    ["announcements", "poster_storage_key"], ["announcements", "poster_media_url"],
+    ["announcements", "published_at"],
+    ["push_subscriptions", "id"], ["push_subscriptions", "endpoint"],
+    ["push_subscriptions", "p256dh_key"], ["push_subscriptions", "auth_key"],
+    ["push_subscription_channels", "push_subscription_id"],
+    ["push_subscription_channels", "channel"],
+    ["admin_sessions", "admin_id"], ["admin_sessions", "token_hash"],
+    ["admin_sessions", "expires_at"]
+  ] as const;
 
   const tables = await client.query<{ object_name: string; exists: boolean }>(
     `SELECT object_name,
@@ -70,14 +82,33 @@ async function detectExistingSchema(client: PoolClient): Promise<"empty" | "comp
   );
 
   const existingCount = tables.rows.filter((row) => row.exists).length;
-  const hasAnySchema = existingCount > 0 || enumResult.rows[0]?.exists === true;
+  const enumExists = enumResult.rows[0]?.exists === true;
+  const hasAnySchema = existingCount > 0 || enumExists;
   if (!hasAnySchema) return "empty";
 
-  const allTablesExist = existingCount === expectedTables.length;
-  const enumExists = enumResult.rows[0]?.exists === true;
-  const indexExists = singleAdminIndex.rows[0]?.exists === true;
+  const columns = await client.query<{ table_name: string; column_name: string }>(
+    `SELECT table_name, column_name
+       FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND (table_name, column_name) IN (
+          SELECT item->>0, item->>1
+          FROM jsonb_array_elements($1::jsonb) AS item
+        )`,
+    [JSON.stringify(requiredColumns)]
+  );
+  const foundColumns = new Set(columns.rows.map((row) => `${row.table_name}.${row.column_name}`));
+  const allRequiredColumnsExist = requiredColumns.every(([table, column]) => foundColumns.has(`${table}.${column}`));
 
-  return allTablesExist && enumExists && indexExists ? "complete" : "partial";
+  const enumLabels = await client.query<{ labels: string[] }>(
+    `SELECT array_agg(enumlabel ORDER BY enumsortorder) AS labels
+       FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
+      WHERE t.typname = 'notification_channel'`
+  );
+  const validEnum = JSON.stringify(enumLabels.rows[0]?.labels ?? []) === JSON.stringify(["photos", "announcements"]);
+
+  const allTablesExist = existingCount === expectedTables.length;
+  const indexExists = singleAdminIndex.rows[0]?.exists === true;
+  return allTablesExist && allRequiredColumnsExist && validEnum && indexExists ? "complete" : "partial";
 }
 
 async function main(): Promise<void> {
