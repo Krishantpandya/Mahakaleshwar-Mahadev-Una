@@ -3,6 +3,15 @@ import { isIP } from "node:net";
 import { z } from "zod";
 import { database } from "../database.js";
 
+function isKnownPushProvider(hostname: string): boolean {
+  return hostname === "fcm.googleapis.com" ||
+    hostname === "web.push.apple.com" ||
+    hostname === "push.services.mozilla.com" ||
+    hostname.endsWith(".push.services.mozilla.com") ||
+    hostname === "notify.windows.com" ||
+    hostname.endsWith(".notify.windows.com");
+}
+
 const endpointSchema = z.string().url().max(4096).refine((value) => {
   try {
     const url = new URL(value);
@@ -11,6 +20,9 @@ const endpointSchema = z.string().url().max(4096).refine((value) => {
     if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local")) return false;
     // Literal IP endpoints are not needed for browser push services and can target private infrastructure.
     if (isIP(hostname)) return false;
+    // Browser push endpoints are hosted by the browser vendors; rejecting arbitrary hosts
+    // prevents this server-side sender from becoming a general-purpose SSRF proxy.
+    if (!isKnownPushProvider(hostname)) return false;
     return true;
   } catch {
     return false;
