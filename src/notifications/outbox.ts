@@ -35,7 +35,7 @@ export async function processNotificationOutbox(logger: FastifyBaseLogger): Prom
         "SELECT id, channel, payload, attempts FROM notification_outbox " +
         "WHERE delivered_at IS NULL AND dead_at IS NULL AND available_at <= NOW() " +
         "AND (claimed_at IS NULL OR claimed_at < NOW() - INTERVAL '5 minutes') " +
-        "ORDER BY created_at ASC FOR UPDATE SKIP LOCKED LIMIT 20"
+        "ORDER BY created_at ASC LIMIT 20 FOR UPDATE SKIP LOCKED"
       );
       rows = claimed.rows;
       if (rows.length) {
