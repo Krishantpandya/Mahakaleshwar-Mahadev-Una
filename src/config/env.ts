@@ -26,6 +26,24 @@ const envSchema = z.object({
   if (value.NODE_ENV === "production" && !value.DATABASE_URL) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["DATABASE_URL"], message: "DATABASE_URL is required in production" });
   }
+  const origins = value.CORS_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean);
+  if (origins.length === 0) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["CORS_ORIGINS"], message: "At least one explicit frontend origin is required" });
+  }
+  for (const origin of origins) {
+    try {
+      const parsedOrigin = new URL(origin);
+      if (parsedOrigin.origin !== origin || parsedOrigin.username || parsedOrigin.password) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ["CORS_ORIGINS"], message: "Each CORS origin must be an exact origin without a path, credentials, or trailing slash" });
+      }
+      if (value.NODE_ENV === "production" &&
+          (parsedOrigin.protocol !== "https:" || parsedOrigin.hostname === "localhost" || parsedOrigin.hostname.endsWith(".localhost"))) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ["CORS_ORIGINS"], message: "Production frontend origins must use HTTPS and cannot be localhost" });
+      }
+    } catch {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["CORS_ORIGINS"], message: "CORS_ORIGINS must contain comma-separated valid origins" });
+    }
+  }
   const b2 = [value.B2_ENDPOINT, value.B2_REGION, value.B2_BUCKET, value.B2_KEY_ID, value.B2_APPLICATION_KEY];
   const count = b2.filter(Boolean).length;
   if (count !== 0 && count !== b2.length) {
