@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { database } from "../database.js";
-import { createB2ReadUrl } from "../storage/b2.js";
+import { createB2ReadUrl, isB2Configured } from "../storage/b2.js";
 
 const listQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(20),
@@ -18,7 +18,7 @@ export const announcementRoutes: FastifyPluginAsync = async (app) => {
       "FROM announcements WHERE published_at IS NOT NULL ORDER BY published_at DESC, id DESC LIMIT $1 OFFSET $2",
       [limit, offset]
     );
-    const data = await Promise.all(result.rows.map(async (row) => {
+    if (result.rows.some((row) => row.poster_storage_key) && !isB2Configured()) {\n      return reply.code(503).send({ error: "Backblaze B2 storage is not configured" });\n    }\n    const data = await Promise.all(result.rows.map(async (row) => {
       const posterUrl = row.poster_storage_key
         ? await createB2ReadUrl(row.poster_storage_key as string)
         : row.poster_media_url;
