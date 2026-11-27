@@ -1,19 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { after, test } from "node:test";
+import { test } from "node:test";
 import { buildApp } from "../src/app.js";
 import { database } from "../src/database.js";
 
-if (!database) throw new Error("DATABASE_URL must be set for integration tests");
-
-const app = buildApp();
-await app.ready();
-
-after(async () => {
-  await app.close();
-});
-
 test("published photo comments support presets, custom text, and immediate listing", async () => {
+  if (!database) throw new Error("DATABASE_URL must be set for integration tests");
+
+  const app = buildApp();
+  await app.ready();
   const photoId = randomUUID();
   const visitorId = randomUUID();
 
@@ -68,5 +63,6 @@ test("published photo comments support presets, custom text, and immediate listi
     assert.equal(invalidResponse.statusCode, 400);
   } finally {
     await database.query("DELETE FROM photos WHERE id = $1", [photoId]);
+    await app.close();
   }
 });
