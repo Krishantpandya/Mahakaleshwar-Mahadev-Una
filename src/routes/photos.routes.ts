@@ -28,22 +28,22 @@ export const photoRoutes: FastifyPluginAsync = async (app) => {
     const values: unknown[] = [];
     const filters = ["published_at IS NOT NULL"];
 
-    // created_at is the upload timestamp; taken_at is optional photo metadata.
+    // uploaded_at is distinct from the optional date the photo was taken.
     if (from) {
       values.push(from);
-      filters.push("created_at >= $" + values.length + "::date");
+      filters.push("uploaded_at >= $" + values.length + "::date");
     }
     if (to) {
       values.push(to);
-      filters.push("created_at < ($" + values.length + "::date + INTERVAL '1 day')");
+      filters.push("uploaded_at < ($" + values.length + "::date + INTERVAL '1 day')");
     }
 
     values.push(limit, offset);
     const limitIndex = values.length - 1;
     const offsetIndex = values.length;
-    const sql = "SELECT id, media_url, mime_type, file_size_bytes, caption, taken_at, published_at, created_at " +
+    const sql = "SELECT id, media_url, mime_type, file_size_bytes, caption, taken_at, published_at, uploaded_at " +
       "FROM photos WHERE " + filters.join(" AND ") +
-      " ORDER BY created_at DESC, id DESC LIMIT $" + limitIndex + " OFFSET $" + offsetIndex;
+      " ORDER BY uploaded_at DESC, id DESC LIMIT $" + limitIndex + " OFFSET $" + offsetIndex;
     const result = await database.query(sql, values);
 
     return { data: result.rows, pagination: { limit, offset, returned: result.rowCount ?? 0 } };

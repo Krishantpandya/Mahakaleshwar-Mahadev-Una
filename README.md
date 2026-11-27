@@ -56,7 +56,7 @@ SQL migrations are stored in database/migrations and must be append-only after t
 
 The migration runner records filenames and SHA-256 checksums in schema_migrations, applies each pending migration transactionally, and rejects edited applied migrations. On the already-initialized database, it recognizes the existing 001/002 schema and baselines those migrations before applying new ones. If it detects a partial schema, it stops rather than guessing.
 
-The initial schema has been applied to Neon project mankaleshwar-mahadev (PostgreSQL 17, AWS Singapore). Never commit database credentials or admin secrets.
+The initial schema has been applied to Neon project mankaleshwar-mahadev (PostgreSQL 17, AWS Singapore). Photo upload time is stored separately in uploaded_at and is the date used by the public photo filters. Never commit database credentials or admin secrets.
 
 ## Storage
 The selected media storage is a private Backblaze B2 bucket. The storage integration and short-lived media URL generation are not implemented yet. Do not treat a private-bucket object URL or a presigned URL as a permanent public media URL.
