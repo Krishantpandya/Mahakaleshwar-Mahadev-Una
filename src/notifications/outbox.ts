@@ -36,8 +36,12 @@ export async function enqueueNotification(
 
 let processing = false;
 
-export async function processNotificationOutbox(logger: FastifyBaseLogger): Promise<void> {
-  if (!database || !isPushConfigured() || processing) return;
+export async function processNotificationOutbox(
+  logger: FastifyBaseLogger,
+  sender: typeof notifyChannel = notifyChannel,
+  pushConfigured: typeof isPushConfigured = isPushConfigured
+): Promise<void> {
+  if (!database || !pushConfigured() || processing) return;
   processing = true;
   try {
     const client = await database.connect();
@@ -67,7 +71,7 @@ export async function processNotificationOutbox(logger: FastifyBaseLogger): Prom
 
     for (const row of rows) {
       try {
-        const result = await notifyChannel(row.channel, row.payload, logger);
+        const result = await sender(row.channel, row.payload, logger);
         if (result.skipped || result.failed > 0) {
           throw new Error(result.skipped
             ? "Push delivery is not configured; notification remains queued"
