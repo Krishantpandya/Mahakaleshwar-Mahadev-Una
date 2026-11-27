@@ -42,7 +42,9 @@ export const photoRoutes: FastifyPluginAsync = async (app) => {
     return { data, pagination: { limit, offset, returned: result.rowCount ?? 0 } };
   });
 
-  app.post<{ Params: { photoId: string } }>("/photos/:photoId/likes", async (request, reply) => {
+  app.post<{ Params: { photoId: string } }>("/photos/:photoId/likes", {
+    config: { rateLimit: { max: 60, timeWindow: "1 minute" } }
+  }, async (request, reply) => {
     if (!database) return reply.code(503).send({ error: "Database is not configured" });
     const photoId = uuidSchema.safeParse(request.params.photoId);
     const body = z.object({ visitorId: uuidSchema }).safeParse(request.body);
@@ -57,7 +59,9 @@ export const photoRoutes: FastifyPluginAsync = async (app) => {
     return reply.code(200).send({ liked: true, likeCount: count.rows[0]?.count ?? 0 });
   });
 
-  app.delete<{ Params: { photoId: string } }>("/photos/:photoId/likes", async (request, reply) => {
+  app.delete<{ Params: { photoId: string } }>("/photos/:photoId/likes", {
+    config: { rateLimit: { max: 60, timeWindow: "1 minute" } }
+  }, async (request, reply) => {
     if (!database) return reply.code(503).send({ error: "Database is not configured" });
     const photoId = uuidSchema.safeParse(request.params.photoId);
     const body = z.object({ visitorId: uuidSchema }).safeParse(request.body);
