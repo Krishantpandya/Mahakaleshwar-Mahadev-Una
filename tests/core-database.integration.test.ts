@@ -88,7 +88,7 @@ test("announcements list exposes only published records", async () => {
 });
 
 test("push subscription upsert replaces channel selections atomically and rejects unsafe endpoints", async () => {
-  const endpoint = `https://push.example.test/subscription/${randomUUID()}`;
+  const endpoint = `https://fcm.googleapis.com/subscription/${randomUUID()}`;
   const payload = {
     endpoint,
     keys: { p256dh: "AbCdEf0123456789_-", auth: "AbCdEf0123456789_-" },
@@ -123,7 +123,8 @@ test("push subscription upsert replaces channel selections atomically and reject
       "http://push.example.test/subscription",
       "https://localhost/subscription",
       "https://127.0.0.1/subscription",
-      "https://user:pass@push.example.test/subscription"
+      "https://user:pass@fcm.googleapis.com/subscription",
+      "https://attacker.example.test/subscription"
     ]) {
       const unsafe = await app.inject({
         method: "PUT", url: "/api/v1/push-subscriptions",
