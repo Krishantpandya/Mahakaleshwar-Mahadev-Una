@@ -50,7 +50,9 @@ export const commentRoutes: FastifyPluginAsync = async (app) => {
     return { data: result.rows, pagination: { limit, offset, returned: result.rowCount ?? 0 } };
   });
 
-  app.post<{ Params: { photoId: string } }>("/photos/:photoId/comments", async (request, reply) => {
+  app.post<{ Params: { photoId: string } }>("/photos/:photoId/comments", {
+    config: { rateLimit: { max: 5, timeWindow: "1 minute" } }
+  }, async (request, reply) => {
     if (!database) return reply.code(503).send({ error: "Database is not configured" });
 
     const photoId = uuidSchema.safeParse(request.params.photoId);
