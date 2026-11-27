@@ -1,24 +1,26 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { matchesImageSignature } from "../src/storage/image-validation.js";
+import sharp from "sharp";
+import { isDecodableImage, matchesImageSignature } from "../src/storage/image-validation.js";
 
-test("accepts matching JPEG, PNG, WebP, and AVIF signatures", () => {
-  const cases: Array<[string, Buffer]> = [
-    ["image/jpeg", Buffer.from([0xff, 0xd8, 0xff, 0x00])],
-    ["image/png", Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])],
-    ["image/webp", Buffer.from("RIFF0000WEBP", "ascii")],
-    ["image/avif", Buffer.from("0000ftypavif0000mif1", "ascii")]
-  ];
+test("fully decodes supported JPEG, PNG, and WebP uploads", async () => {
+  const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: { r: 10, g: 20, b: 30 } } }).png().toBuffer();
+  const jpeg = await sharp(png).jpeg().toBuffer();
+  const webp = await sharp(png).webp().toBuffer();
 
-  for (const [mimeType, bytes] of cases) {
-    assert.equal(matchesImageSignature(bytes, mimeType), true, mimeType);
-  }
+  assert.equal(await isDecodableImage(jpeg, "image/jpeg"), true);
+  assert.equal(await isDecodableImage(png, "image/png"), true);
+  assert.equal(await isDecodableImage(webp, "image/webp"), true);
 });
 
-test("rejects mismatched, truncated, empty, and unsupported image content", () => {
+test("rejects mismatched, truncated, corrupt, unsupported and oversized image content", async () => {
+  const validPng = await sharp({ create: { width: 2, height: 2, channels: 3, background: "white" } }).png().toBuffer();
+  const truncated = validPng.subarray(0, 24);
+  const corrupt = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(128, 0)]);
   assert.equal(matchesImageSignature(Buffer.from("<svg></svg>"), "image/png"), false);
-  assert.equal(matchesImageSignature(Buffer.from([0xff, 0xd8]), "image/jpeg"), false);
-  assert.equal(matchesImageSignature(Buffer.alloc(0), "image/webp"), false);
-  assert.equal(matchesImageSignature(Buffer.from("anything"), "image/gif"), false);
-  assert.equal(matchesImageSignature(Buffer.from("0000ftypmif1"), "image/avif"), false);
+  assert.equal(await isDecodableImage(truncated, "image/png"), false);
+  assert.equal(await isDecodableImage(corrupt, "image/jpeg"), false);
+  assert.equal(await isDecodableImage(Buffer.alloc(0), "image/webp"), false);
+  assert.equal(await isDecodableImage(validPng, "image/jpeg"), false);
+  assert.equal(await isDecodableImage(Buffer.from("anything"), "image/gif" as never), false);
 });
