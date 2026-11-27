@@ -39,6 +39,8 @@ jobs:
         run: npm run typecheck
       - name: Build
         run: npm run build
+      - name: Run unit tests
+        run: npm run test:unit
       - name: Apply database migrations
         run: npm run db:migrate
       - name: Verify migration idempotency
