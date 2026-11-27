@@ -24,8 +24,8 @@ test("photo listing filters by upload date and guest likes are idempotent/remova
   const visitorId = randomUUID();
   try {
     await database.query(
-      "INSERT INTO photos (id, storage_key, mime_type, published_at, uploaded_at) VALUES ($1, $2, $3, NOW(), NOW())",
-      [photoId, `integration-tests/${photoId}.jpg`, "image/jpeg"]
+      "INSERT INTO photos (id, storage_key, media_url, mime_type, published_at, uploaded_at) VALUES ($1, $2, $3, $4, NOW(), NOW())",
+      [photoId, `integration-tests/${photoId}.jpg`, `https://media.example.test/${photoId}.jpg`, "image/jpeg"]
     );
 
     const list = await app.inject({ method: "GET", url: "/api/v1/photos?limit=10&offset=0" });
