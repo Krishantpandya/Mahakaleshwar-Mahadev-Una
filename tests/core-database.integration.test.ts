@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID, randomBytes, scrypt as scryptCallback } from "node:crypto";
+import { createHash, randomUUID, randomBytes, scrypt as scryptCallback } from "node:crypto";
 import { promisify } from "node:util";
 import { after, before, test } from "node:test";
 import { buildApp } from "../src/app.js";
@@ -235,6 +235,18 @@ test("admin sessions authenticate, reject invalid sessions, and logout revokes t
     });
     assert.equal(me.statusCode, 200);
     assert.equal(me.json<{ admin: { email: string } }>().admin.email, email);
+
+    const expiredToken = randomBytes(32).toString("base64url");
+    const expiredHash = createHash("sha256").update(expiredToken).digest("hex");
+    await database.query(
+      "INSERT INTO admin_sessions (admin_id, token_hash, expires_at) VALUES ($1, $2, NOW() - INTERVAL '1 minute')",
+      [adminId, expiredHash]
+    );
+    const expiredSession = await app.inject({
+      method: "GET", url: "/api/v1/admin/auth/me",
+      cookies: { mankaleshwar_admin_session: expiredToken }
+    });
+    assert.equal(expiredSession.statusCode, 401);
 
     const blockedLogout = await app.inject({
       method: "POST", url: "/api/v1/admin/auth/logout",
