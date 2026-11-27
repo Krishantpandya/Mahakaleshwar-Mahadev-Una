@@ -73,7 +73,7 @@ At least message text or a poster image is required. Text-only announcements do 
 
 ## Browser push notifications
 
-The backend uses the standard Web Push protocol. Publishing a photo sends a notification to subscribers of the `photos` channel; publishing an announcement sends to subscribers of the `announcements` channel. Delivery failures do not roll back already-published content. Transient failures are retried up to three attempts; endpoints returning 404 or 410 are removed. Delivery is skipped until all three VAPID settings are configured:
+The backend uses the standard Web Push protocol. Publishing a photo queues a notification for subscribers of the `photos` channel; publishing an announcement queues one for subscribers of the `announcements` channel. A PostgreSQL outbox stores pending notifications and a background worker retries delivery with exponential backoff (up to 10 attempts), so queued notifications survive API process restarts. Expired endpoints returning 404 or 410 are removed. Delivery remains queued until all three VAPID settings are configured. The content insert and outbox enqueue are currently separate database operations, so a database failure between them can still leave published content without a queued notification.
 
 - `VAPID_PUBLIC_KEY`
 - `VAPID_PRIVATE_KEY`
@@ -88,6 +88,7 @@ Migrations are append-only under database/migrations. The migration runner recor
 - Admin editing/deletion lifecycle (rules not yet decided)
 - Comment moderation/reporting and stronger abuse controls (policy not yet decided)
 - Editing/deleting media and announcements (lifecycle rules not yet decided)
+- Atomic content/outbox transaction (close the small enqueue failure window)
 - B2 integration tests and live verification against the configured private bucket
 - Hosting configuration and deployment
 - Pujari/admin contact workflow (not decided)
