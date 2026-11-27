@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 import { after, before, test } from "node:test";
 import { buildApp } from "../src/app.js";
 import { database } from "../src/database.js";
-import { enqueueNotification } from "../src/notifications/outbox.js";
+import { enqueueNotification, processNotificationOutbox } from "../src/notifications/outbox.js";
 
 const scrypt = promisify(scryptCallback);
 
@@ -189,6 +189,74 @@ test("content and its notification outbox row roll back as one transaction", asy
   );
   assert.equal(announcement.rowCount, 0);
   assert.equal(notification.rowCount, 0);
+});
+
+test("notification worker marks successful delivery and retries failures with bounded attempts", async () => {
+  const successTitle = "Worker success " + randomUUID();
+  const failedTitle = "Worker retry " + randomUUID();
+  const deadTitle = "Worker dead-letter " + randomUUID();
+
+  const success = await database.query(
+    "INSERT INTO notification_outbox (channel, payload) VALUES ($1, $2::jsonb) RETURNING id",
+    ["photos", JSON.stringify({ title: successTitle, body: "success", url: "/" })]
+  );
+  const failed = await database.query(
+    "INSERT INTO notification_outbox (channel, payload) VALUES ($1, $2::jsonb) RETURNING id",
+    ["photos", JSON.stringify({ title: failedTitle, body: "failure", url: "/" })]
+  );
+  const dead = await database.query(
+    "INSERT INTO notification_outbox (channel, payload, attempts) VALUES ($1, $2::jsonb, 9) RETURNING id",
+    ["photos", JSON.stringify({ title: deadTitle, body: "dead letter", url: "/" })]
+  );
+
+  try {
+    await processNotificationOutbox(
+      app.log,
+      async () => ({ attempted: 1, sent: 1, failed: 0 }),
+      () => true
+    );
+    const successState = await database.query(
+      "SELECT delivered_at FROM notification_outbox WHERE id = $1",
+      [success.rows[0].id]
+    );
+    assert.ok(successState.rows[0].delivered_at);
+
+    // Re-arm the two failure cases after the success batch.
+    await database.query(
+      "UPDATE notification_outbox SET claimed_at = NULL, available_at = NOW(), attempts = 0 WHERE id = $1",
+      [failed.rows[0].id]
+    );
+    await database.query(
+      "UPDATE notification_outbox SET claimed_at = NULL, available_at = NOW() WHERE id = $1",
+      [dead.rows[0].id]
+    );
+    await processNotificationOutbox(
+      app.log,
+      async () => ({ attempted: 1, sent: 0, failed: 1 }),
+      () => true
+    );
+
+    const retryState = await database.query(
+      "SELECT attempts, available_at, dead_at, last_error FROM notification_outbox WHERE id = $1",
+      [failed.rows[0].id]
+    );
+    assert.equal(retryState.rows[0].attempts, 1);
+    assert.ok(new Date(retryState.rows[0].available_at).getTime() > Date.now());
+    assert.equal(retryState.rows[0].dead_at, null);
+    assert.match(retryState.rows[0].last_error, /failed for 1 subscription/);
+
+    const deadState = await database.query(
+      "SELECT attempts, dead_at FROM notification_outbox WHERE id = $1",
+      [dead.rows[0].id]
+    );
+    assert.equal(deadState.rows[0].attempts, 10);
+    assert.ok(deadState.rows[0].dead_at);
+  } finally {
+    await database.query(
+      "DELETE FROM notification_outbox WHERE id = ANY($1::uuid[])",
+      [[success.rows[0].id, failed.rows[0].id, dead.rows[0].id]]
+    );
+  }
 });
 
 test("notification outbox claims are concurrency-safe and stale claims can be recovered", async () => {
