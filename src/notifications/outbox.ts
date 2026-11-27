@@ -1,6 +1,6 @@
 import type { FastifyBaseLogger } from "fastify";
 import { database } from "../database.js";
-import { notifyChannel, type NotificationChannel } from "./web-push.js";
+import { isPushConfigured, notifyChannel, type NotificationChannel } from "./web-push.js";
 
 type NotificationPayload = { title: string; body: string; url: string };
 type OutboxRow = {
@@ -24,7 +24,7 @@ export async function enqueueNotification(
 let processing = false;
 
 export async function processNotificationOutbox(logger: FastifyBaseLogger): Promise<void> {
-  if (!database || processing) return;
+  if (!database || !isPushConfigured() || processing) return;
   processing = true;
   try {
     const client = await database.connect();
