@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { buildApp } from "../src/app.js";
 import { database } from "../src/database.js";
 
-test("published photo comments support presets, custom text, and immediate listing", async () => {
+test("published photo comments support presets, custom text, immediate listing, and rate limiting", async () => {
   if (!database) throw new Error("DATABASE_URL must be set for integration tests");
 
   const app = buildApp();
@@ -61,6 +61,22 @@ test("published photo comments support presets, custom text, and immediate listi
       payload: { visitorId, body: "   " }
     });
     assert.equal(invalidResponse.statusCode, 400);
+
+    const firstWithinLimit = await app.inject({
+      method: "POST", url: `/api/v1/photos/${photoId}/comments`,
+      payload: { visitorId, body: "Rate-limit test one" }
+    });
+    const secondWithinLimit = await app.inject({
+      method: "POST", url: `/api/v1/photos/${photoId}/comments`,
+      payload: { visitorId, body: "Rate-limit test two" }
+    });
+    const overLimit = await app.inject({
+      method: "POST", url: `/api/v1/photos/${photoId}/comments`,
+      payload: { visitorId, body: "Rate-limit test three" }
+    });
+    assert.equal(firstWithinLimit.statusCode, 201);
+    assert.equal(secondWithinLimit.statusCode, 201);
+    assert.equal(overLimit.statusCode, 429);
   } finally {
     await database.query("DELETE FROM photos WHERE id = $1", [photoId]);
     await app.close();
