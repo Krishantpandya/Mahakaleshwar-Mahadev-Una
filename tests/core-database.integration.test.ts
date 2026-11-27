@@ -150,6 +150,40 @@ test("published notifications are persisted in the retryable outbox", async () =
   await database.query("DELETE FROM notification_outbox WHERE payload->>'title' = $1", [payload.title]);
 });
 
+test("content and its notification outbox row roll back as one transaction", async () => {
+  const announcementId = randomUUID();
+  const client = await database.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      "INSERT INTO announcements (id, title, message, published_at) VALUES ($1, $2, $3, NOW())",
+      [announcementId, "Atomicity test", "This row must roll back"]
+    );
+    await client.query(
+      "INSERT INTO notification_outbox (channel, payload) VALUES ($1, $2::jsonb)",
+      ["announcements", JSON.stringify({
+        title: "Atomicity test",
+        body: "This outbox row must roll back",
+        url: "/"
+      })]
+    );
+    await client.query("ROLLBACK");
+  } finally {
+    client.release();
+  }
+
+  const announcement = await database.query(
+    "SELECT id FROM announcements WHERE id = $1",
+    [announcementId]
+  );
+  const notification = await database.query(
+    "SELECT id FROM notification_outbox WHERE payload->>'title' = $1",
+    ["Atomicity test"]
+  );
+  assert.equal(announcement.rowCount, 0);
+  assert.equal(notification.rowCount, 0);
+});
+
 test("admin sessions authenticate, reject invalid sessions, and logout revokes the session", async () => {
   const email = `integration-${randomUUID()}@example.test`;
   const password = "Integration-Test-Password-123";
