@@ -2,11 +2,11 @@
 
 ## 1. Project Overview
 
-Build a responsive website for Mankaleshwar Mahadev Temple that allows visitors to view temple photos, follow announcements about upcoming events, and subscribe to notification channels. Administrators will manage photos, announcements, and channel messages.
+Build a responsive website for Mankaleshwar Mahadev Temple that allows visitors to view temple photos, follow announcements about upcoming events, and subscribe to notification channels. One administrator will manage photos, announcements, and channel messages.
 
 ## 2. Admin Site Requirements
 
-Administrators must be able to:
+The single administrator must be able to:
 
 1. **Manage photos**
    - Add and publish photos of the Shivling.
@@ -23,9 +23,11 @@ Visitors must be able to:
 
 1. **View and interact with photos**
    - View photos of the Shivling.
-   - Filter or search photos by date.
-   - Like photos.
-   - Comment on photos.
+   - Filter photos by their upload date (not the date the photo was taken).
+   - Like photos and remove their own likes.
+   - Select predefined comments, including "Har Har Mahadev".
+   - Submit their own custom comments.
+   - See comments immediately after submission; admin approval is not required.
    - Download photos.
 
 2. **Contact the pujari/admin**
@@ -42,14 +44,12 @@ Visitors must be able to:
 ## 4. User-Facing Pages
 
 ### 4.1 Photos
-
 - This will be the first page visitors see when they open the website.
 - Display photos of the Shivling.
-- Allow visitors to search or filter photos by date.
-- Allow visitors to like, comment on, and download photos.
+- Allow visitors to filter photos by upload date.
+- Allow visitors to like, remove their likes, comment on, and download photos.
 
 ### 4.2 Announcements
-
 - Display announcements about upcoming events, special programs, and Mahapujas.
 - Support announcement posters and text messages.
 - Show the announcement publication date.
@@ -60,35 +60,30 @@ The website will have two separate notification channels:
 
 #### Photos
 - Visitors can subscribe to this channel.
-- Subscribers receive notifications when new daily photos are published.
+- Subscribers receive notifications when new photos are published.
 
 #### Announcements
 - Visitors can subscribe to this channel.
 - Subscribers receive notifications about upcoming events and announcements.
 
 ## 5. Visitor Access
-
 - Visitors should be able to browse the public website without creating an account.
 - Visitors should be able to like, comment on, and download photos as guests.
 - Channel subscriptions are separate from creating a website account.
 
-## 6. Requirements Boundaries and Decisions Pending
+## 6. Confirmed Technical Decisions
+- There will be exactly one administrator account.
+- PostgreSQL is the database.
+- Media storage will use a private Backblaze B2 bucket.
 
-The following details have not yet been specified. They must not be assumed during implementation:
-
+## 7. Decisions Still Pending
 - The exact method for contacting the pujari/administrator.
-- Admin authentication, roles, and permission details.
-- Comment moderation, reporting, and spam-prevention rules.
-- Whether likes can be removed or changed.
-- The exact photo-filtering controls beyond filtering/searching by date.
-- Notification delivery implementation and provider.
-- Photo storage provider, storage limits, and retention policy.
+- Push notification delivery provider and VAPID key management details.
+- Comment spam-prevention and abuse-handling policy.
+- Photo storage limits and retention policy.
 - Announcement scheduling, expiry, and editing/deletion rules.
 
-These items require confirmation before decisions are made about their implementation.
-
-## 7. General Quality Expectations
-
+## 8. General Quality Expectations
 - The website should be responsive across mobile, tablet, and desktop screens.
 - Preserve a clear distinction between the public user site and the admin site.
 - Do not introduce features or workflows that are not supported by confirmed requirements.
