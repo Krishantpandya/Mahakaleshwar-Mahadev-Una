@@ -7,6 +7,7 @@ TypeScript API service for the Mankaleshwar Mahadev Temple website.
 - PostgreSQL 17 hosted on Neon
 - Backblaze B2 private bucket through its S3-compatible API
 - Zod request and environment validation
+- Browser Web Push using VAPID with separate Photos and Announcements channels
 
 ## Run locally
 1. Copy .env.example to .env.
@@ -21,6 +22,7 @@ TypeScript API service for the Mankaleshwar Mahadev Temple website.
 - npm run build — compile to dist/
 - npm start — run compiled server
 - npm run db:migrate — apply pending SQL migrations and record checksums
+- npm run test:unit — run isolated unit tests
 - npm run test:integration — run PostgreSQL-backed API integration tests (requires DATABASE_URL)
 - npm run admin:create — one-time single-admin provisioning; requires DATABASE_URL, ADMIN_EMAIL, ADMIN_PASSWORD (12+ characters)
 
@@ -69,11 +71,22 @@ Announcement publication uses multipart/form-data with optional title, message, 
 POST /api/v1/admin/announcements
 At least message text or a poster image is required. Text-only announcements do not require B2. Scheduling, editing, and deletion policies are not assumed or implemented.
 
+## Browser push notifications
+
+The backend uses the standard Web Push protocol. Publishing a photo sends a notification to subscribers of the `photos` channel; publishing an announcement sends to subscribers of the `announcements` channel. Delivery failures do not roll back already-published content. Transient failures are retried up to three attempts; endpoints returning 404 or 410 are removed. Delivery is skipped until all three VAPID settings are configured:
+
+- `VAPID_PUBLIC_KEY`
+- `VAPID_PRIVATE_KEY`
+- `VAPID_SUBJECT` — a `mailto:` contact or HTTPS URL
+
+Generate VAPID keys with a trusted Web Push key-generation tool and configure these values as encrypted hosting secrets. Never commit private keys. Browser clients must use the matching public key when subscribing.
+
 ## Database
 Migrations are append-only under database/migrations. The migration runner records SHA-256 checksums and rejects edits to already-applied migrations. The Neon schema has been applied; production DATABASE_URL still belongs in the backend host's secret environment configuration.
 
 ## Remaining backend work
-- Browser push delivery and automatic publish triggers
+- Admin editing/deletion lifecycle (rules not yet decided)
+- Comment moderation/reporting and stronger abuse controls (policy not yet decided)
 - Editing/deleting media and announcements (lifecycle rules not yet decided)
 - B2 integration tests and live verification against the configured private bucket
 - Hosting configuration and deployment
